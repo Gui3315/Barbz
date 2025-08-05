@@ -1,0 +1,11 @@
+
+<svg width="60" height="60" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="barberPattern" width="60" height="60" patternUnits="userSpaceOnUse">
+      <rect width="60" height="60" fill="#ffffff" opacity="0.05"/>
+      <line x1="0" y1="0" x2="60" y2="60" stroke="#d4af37" stroke-width="1" opacity="0.1"/>
+      <line x1="60" y1="0" x2="0" y2="60" stroke="#d4af37" stroke-width="1" opacity="0.1"/>
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#barberPattern)"/>
+</svg>
