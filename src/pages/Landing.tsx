@@ -22,10 +22,10 @@ export default function Landing() {
           <Logo className="h-10" />
           <div className="flex gap-4">
             <Button variant="outline" asChild>
-              <Link to="/cliente">Área do Cliente</Link>
+              <Link to="/login">Área do Cliente</Link>
             </Button>
             <Button className="btn-primary" asChild>
-              <Link to="/">Entrar</Link>
+              <Link to="/login">Área do Proprietário</Link>
             </Button>
           </div>
         </div>
@@ -44,7 +44,7 @@ export default function Landing() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button className="btn-primary text-lg" size="lg" asChild>
-                  <Link to="/">
+                  <Link to="/login">
                     Começar agora
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Link>
@@ -350,7 +350,7 @@ export default function Landing() {
             Experimente o BARBZ gratuitamente por 14 dias. Sem compromisso.
           </p>
           <Button className="btn-primary text-lg" size="lg" asChild>
-            <Link to="/">
+            <Link to="/login">
               Começar gratuitamente
             </Link>
           </Button>
@@ -367,13 +367,13 @@ export default function Landing() {
             </p>
           </div>
           <div className="flex gap-6">
-            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+            <Link to="#" className="text-sm text-muted-foreground hover:text-foreground">
               Termos de Uso
             </Link>
-            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+            <Link to="#" className="text-sm text-muted-foreground hover:text-foreground">
               Política de Privacidade
             </Link>
-            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+            <Link to="#" className="text-sm text-muted-foreground hover:text-foreground">
               Contato
             </Link>
           </div>

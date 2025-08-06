@@ -4,11 +4,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Landing from "./pages/Landing";
 import Agendamentos from "./pages/Agendamentos";
-import Clientes from "./pages/Clientes";
+import Clientes from "./pages/Proprietario";
 import Financeiro from "./pages/Financeiro";
 import Mensagens from "./pages/Mensagens";
 import Fidelidade from "./pages/Fidelidade";
@@ -17,6 +17,8 @@ import Cliente from "./pages/Cliente";
 import Produtos from "./pages/Produtos";
 import Comandas from "./pages/Comandas";
 import LogsAtividades from "./pages/LogsAtividades";
+import Proprietario from "./pages/Proprietario";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -27,10 +29,10 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/landing" element={<Landing />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/agendamentos" element={<Agendamentos />} />
-          <Route path="/clientes" element={<Clientes />} />
+          {/* Removido /clientes, dashboard do proprietário acessível apenas por /areadoproprietario */}
           <Route path="/financeiro" element={<Financeiro />} />
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/comandas" element={<Comandas />} />
@@ -39,6 +41,9 @@ const App = () => (
           <Route path="/configuracoes" element={<Configuracoes />} />
           <Route path="/logs-atividades" element={<LogsAtividades />} />
           <Route path="/cliente" element={<Cliente />} />
+          <Route path="/proprietario" element={<ProtectedRoute allowed="proprietario"><Proprietario /></ProtectedRoute>} />
+          <Route path="/areadoproprietario" element={<ProtectedRoute allowed="proprietario"><Proprietario /></ProtectedRoute>} />
+          <Route path="/cliente" element={<ProtectedRoute allowed="cliente"><Cliente /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
