@@ -16,7 +16,8 @@ import {
   Bell,
   Star,
   Package,
-  FileText
+  FileText,
+  Clock
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -24,7 +25,7 @@ const navItems = [
   {
     title: "Dashboard",
     icon: <BarChart2 className="h-5 w-5" />,
-    href: "/",
+    href: "/proprietario",
   },
   {
     title: "Agendamentos",
@@ -55,6 +56,11 @@ const navItems = [
     title: "Fidelidade",
     icon: <Star className="h-5 w-5" />,
     href: "/fidelidade",
+  },
+  {
+    title: "Funcionamento",
+    icon: <Clock className="h-5 w-5" />,
+    href: "/funcionamento",
   },
   {
     title: "Configurações",
@@ -89,7 +95,6 @@ export function Sidebar() {
           <Menu className="h-6 w-6" />
         </Button>
       )}
-      
       <div
         className={cn(
           "fixed h-full bg-white dark:bg-barber-DEFAULT border-r border-border transition-all duration-300 z-40",
@@ -99,7 +104,6 @@ export function Sidebar() {
       >
         {isMobile && (
           <Button
-            variant="ghost"
             size="icon"
             onClick={toggleSidebar}
             className="absolute top-4 right-4"
@@ -107,11 +111,9 @@ export function Sidebar() {
             <X className="h-5 w-5" />
           </Button>
         )}
-        
         <div className="p-6">
           <Logo />
         </div>
-        
         <div className="px-3 flex-1">
           <nav className="space-y-1">
             {navItems.map((item) => (
@@ -130,7 +132,6 @@ export function Sidebar() {
             ))}
           </nav>
         </div>
-        
         <div className="p-4 border-t border-border flex justify-between items-center">
           <div className="flex items-center">
             <div className="w-8 h-8 rounded-full bg-barber-light flex items-center justify-center text-white">
@@ -146,7 +147,6 @@ export function Sidebar() {
           </Button>
         </div>
       </div>
-      
       {isMobile && isOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-30"

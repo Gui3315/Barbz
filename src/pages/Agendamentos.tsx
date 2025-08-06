@@ -31,21 +31,13 @@ const barbers = [
   { id: 3, name: "Marcos Silva" },
 ];
 
-// Available time slots
-const timeSlots = [
-  "08:00", "08:30", "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-  "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30",
-  "16:00", "16:30", "17:00", "17:30", "18:00", "18:30", "19:00", "19:30",
-];
+// Horários dinâmicos conforme funcionamento do salão
+import { salonSchedule, generateTimeSlots } from "@/config/salonSchedule";
 
 // Available services
-const services = [
-  { id: 1, name: "Corte Simples", duration: 30, price: 35 },
-  { id: 2, name: "Corte Degradê", duration: 30, price: 40 },
-  { id: 3, name: "Barba Completa", duration: 20, price: 25 },
-  { id: 4, name: "Corte + Barba", duration: 45, price: 55 },
-  { id: 5, name: "Sobrancelha", duration: 15, price: 15 },
-];
+import { initialProducts } from "./Produtos";
+// Sincroniza serviços com Produtos.tsx
+const services = initialProducts.filter(p => p.type === "service");
 
 export default function Agendamentos() {
   const { toast } = useToast();
@@ -261,17 +253,25 @@ export default function Agendamentos() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Horário</label>
                   <div className="grid grid-cols-4 gap-2">
-                    {timeSlots.map((time) => (
-                      <Button
-                        key={time}
-                        type="button"
-                        variant={selectedTime === time ? "default" : "outline"}
-                        onClick={() => setSelectedTime(time)}
-                        className="py-1"
-                      >
-                        {time}
-                      </Button>
-                    ))}
+                    {(() => {
+                      // Descobre o dia da semana selecionado
+                      const diasSemana = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
+                      const diaSelecionado = selectedDate ? diasSemana[selectedDate.getDay()] : null;
+                      const configDia = salonSchedule.find(d => d.day === diaSelecionado);
+                      if (!configDia || !configDia.active) return <span className="col-span-4 text-muted-foreground">Salão fechado</span>;
+                      const slots = generateTimeSlots(configDia.open, configDia.close);
+                      return slots.map((time) => (
+                        <Button
+                          key={time}
+                          type="button"
+                          variant={selectedTime === time ? "default" : "outline"}
+                          onClick={() => setSelectedTime(time)}
+                          className="py-1"
+                        >
+                          {time}
+                        </Button>
+                      ));
+                    })()}
                   </div>
                 </div>
 

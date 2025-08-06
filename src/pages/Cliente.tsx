@@ -1,8 +1,9 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import { Link } from "react-router-dom";
 import { ClientLayout } from "@/components/client/layout";
-import { ClientBooking } from "@/components/client/booking";
+import ClientBooking from "@/components/client/booking";
 import { ClientLoyalty } from "@/components/client/loyalty";
 import { ClientProfile } from "@/components/client/profile";
 import { ClientCommand } from "@/components/client/command";
@@ -12,13 +13,45 @@ import { Calendar, User, Star, ShoppingBag } from "lucide-react";
 export default function Cliente() {
   const [activeTab, setActiveTab] = useState("agendamento");
   const [hasCommand, setHasCommand] = useState(false);
-  const [commandId, setCommandId] = useState(`cmd-${Date.now()}`); // Generate a unique ID for the command
-  
+  const [commandId, setCommandId] = useState(`cmd-${Date.now()}`);
+  const [clientData, setClientData] = useState<any>(null);
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchClientAndProfile() {
+      setLoading(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setClientData(null);
+        setProfileData(null);
+        setLoading(false);
+        return;
+      }
+      const [{ data: client, error: clientError }, { data: profile, error: profileError }] = await Promise.all([
+        supabase.from("clients").select("*").eq("user_id", user.id).single(),
+        supabase.from("profiles").select("user_name").eq("id", user.id).single(),
+      ]);
+      setClientData(client || null);
+      setProfileData(profile || null);
+      setLoading(false);
+    }
+    fetchClientAndProfile();
+  }, []);
+
   return (
     <ClientLayout>
       <div className="container mx-auto py-6 space-y-6">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold">Olá, Rodrigo!</h1>
+          <h1 className="text-2xl font-bold">
+            {loading
+              ? "Carregando..."
+              : profileData && profileData.user_name
+                ? `Olá, ${profileData.user_name}!`
+                : "Olá!"}
+          </h1>
           <Link 
             to="/landing" 
             className="text-sm text-muted-foreground hover:text-barber-gold transition-colors"
@@ -26,17 +59,17 @@ export default function Cliente() {
             Sair
           </Link>
         </div>
-        
-        {hasCommand && (
+
+        {hasCommand && clientData && (
           <div className="my-6">
             <ClientCommand 
-              clientId="client-rodrigo" 
-              clientName="Rodrigo" 
+              clientId={clientData.id} 
+              clientName={clientData.name} 
               highlightCommand={true}
             />
           </div>
         )}
-        
+
         <Tabs 
           defaultValue="agendamento"
           value={activeTab} 
@@ -61,18 +94,18 @@ export default function Cliente() {
               <span>Perfil</span>
             </TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="agendamento">
             <ClientBooking onBookingComplete={() => {
               setHasCommand(true);
-              setCommandId(`cmd-${Date.now()}`); // Generate a new command ID for each booking
+              setCommandId(`cmd-${Date.now()}`);
             }} />
           </TabsContent>
-          
+
           <TabsContent value="fidelidade">
             <ClientLoyalty />
           </TabsContent>
-          
+
           <TabsContent value="produtos">
             {!hasCommand ? (
               <div className="text-center py-8 space-y-4">
@@ -82,13 +115,15 @@ export default function Cliente() {
                 </p>
               </div>
             ) : (
-              <ClientCommand 
-                clientId="client-rodrigo" 
-                clientName="Rodrigo"
-              />
+              clientData && (
+                <ClientCommand 
+                  clientId={clientData.id} 
+                  clientName={clientData.name}
+                />
+              )
             )}
           </TabsContent>
-          
+
           <TabsContent value="perfil">
             <ClientProfile />
           </TabsContent>

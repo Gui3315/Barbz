@@ -112,7 +112,7 @@ export default function Login() {
       return;
     }
     if (profileData.user_type === 'proprietario') {
-      window.location.href = '/areadoproprietario';
+      window.location.href = '/proprietario';
     } else {
       window.location.href = '/cliente';
     }

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+
 
 interface ProtectedRouteProps {
   allowed: "proprietario" | "cliente";
@@ -8,34 +9,18 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ allowed, children }: ProtectedRouteProps) {
-  const [loading, setLoading] = useState(true);
-  const [authorized, setAuthorized] = useState(false);
+// ...existing code...
+
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    async function checkAuth() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        navigate("/login");
-        return;
-      }
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("user_type")
-        .eq("id", user.id)
-        .single();
-      if (!profile || profile.user_type !== allowed) {
-        navigate("/login");
-        return;
-      }
-      setAuthorized(true);
+    if (!loading && (!user || user.user_type !== allowed)) {
+      navigate("/login");
     }
-    checkAuth().finally(() => setLoading(false));
-  }, [allowed, navigate]);
+  }, [user, allowed, loading, navigate]);
 
   if (loading) return <div className="p-8 text-center">Carregando...</div>;
-  if (!authorized) return null;
+  if (!user || user.user_type !== allowed) return null;
   return <>{children}</>;
 }

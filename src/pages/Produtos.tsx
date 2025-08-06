@@ -35,44 +35,52 @@ interface Product {
   category?: string; // for product categorization
 }
 
-const initialProducts: Product[] = [
+export const initialProducts: Product[] = [
   // Services
   {
     id: 1,
     name: "Corte Simples",
     type: "service",
     price: 35.00,
-    description: "Corte de cabelo tradicional",
+    description: "Corte de cabelo",
     duration: 30
   },
   {
     id: 2,
-    name: "Corte Degradê",
+    name: "Corte + barba",
     type: "service",
-    price: 40.00,
-    description: "Corte degradê com máquina e tesoura",
-    duration: 30
+    price: 50.00,
+    description: "Corte de cabelo mais barba terapia",
+    duration: 60
   },
   {
     id: 3,
-    name: "Barba Completa",
+    name: "Barba Terapia",
     type: "service",
-    price: 25.00,
-    description: "Serviço completo de barba com toalha quente",
-    duration: 20
+    price: 20.00,
+    description: "Serviço completo de barba",
+    duration: 30
   },
   {
     id: 4,
-    name: "Corte + Barba",
+    name: "Sobrancelha",
     type: "service",
-    price: 55.00,
-    description: "Combo de corte e barba",
-    duration: 45
+    price: 15.00,
+    description: "Serviço completo de sobrancelha",
+    duration: 30
   },
-  
-  // Products - Hair
   {
     id: 5,
+    name: "Corte + barba + sobrancelha",
+    type: "service",
+    price: 65.00,
+    description: "Serviço completo de corte de cabelo, barba terapia e sobrancelha",
+    duration: 60
+  },
+
+  // Products - Hair
+  {
+    id: 6,
     name: "Pomada Modeladora",
     type: "product",
     price: 45.00,
@@ -81,7 +89,7 @@ const initialProducts: Product[] = [
     category: "hair"
   },
   {
-    id: 6,
+    id: 7,
     name: "Shampoo Barba",
     type: "product",
     price: 35.00,
@@ -92,7 +100,7 @@ const initialProducts: Product[] = [
   
   // Beverages - Beer
   {
-    id: 7,
+    id: 8,
     name: "Heineken",
     type: "product",
     price: 10.00,
@@ -101,7 +109,7 @@ const initialProducts: Product[] = [
     category: "beer"
   },
   {
-    id: 8,
+    id: 9,
     name: "Stella Artois",
     type: "product",
     price: 11.00,
@@ -110,7 +118,7 @@ const initialProducts: Product[] = [
     category: "beer"
   },
   {
-    id: 9,
+    id: 10,
     name: "Corona",
     type: "product",
     price: 12.00,
@@ -121,7 +129,7 @@ const initialProducts: Product[] = [
   
   // Beverages - Soft Drinks
   {
-    id: 10,
+    id: 11,
     name: "Coca-Cola",
     type: "product",
     price: 5.00,
@@ -130,7 +138,7 @@ const initialProducts: Product[] = [
     category: "soda"
   },
   {
-    id: 11,
+    id: 12,
     name: "Pepsi",
     type: "product",
     price: 5.00,
@@ -139,7 +147,7 @@ const initialProducts: Product[] = [
     category: "soda"
   },
   {
-    id: 12,
+    id: 13,
     name: "Guaraná Antarctica",
     type: "product",
     price: 5.00,
@@ -150,7 +158,7 @@ const initialProducts: Product[] = [
   
   // Water
   {
-    id: 13,
+    id: 14,
     name: "Água Mineral",
     type: "product",
     price: 3.00,
@@ -159,7 +167,7 @@ const initialProducts: Product[] = [
     category: "water"
   },
   {
-    id: 14,
+    id: 15,
     name: "Água Mineral com Gás",
     type: "product",
     price: 4.00,
@@ -170,7 +178,7 @@ const initialProducts: Product[] = [
   
   // Coffee
   {
-    id: 15,
+    id: 16,
     name: "Café Espresso",
     type: "product",
     price: 4.00,
@@ -179,7 +187,7 @@ const initialProducts: Product[] = [
     category: "coffee"
   },
   {
-    id: 16,
+    id: 17,
     name: "Café Cappuccino",
     type: "product",
     price: 7.00,
@@ -190,7 +198,7 @@ const initialProducts: Product[] = [
   
   // Energy Drinks
   {
-    id: 17,
+    id: 18,
     name: "Red Bull",
     type: "product",
     price: 15.00,
@@ -199,7 +207,7 @@ const initialProducts: Product[] = [
     category: "energy"
   },
   {
-    id: 18,
+    id: 19,
     name: "Monster",
     type: "product",
     price: 14.00,
@@ -288,7 +296,7 @@ export default function Produtos() {
       });
       return;
     }
-    
+
     const updatedProducts = products.map(prod => {
       if (prod.id === selectedProduct.id) {
         return {
@@ -941,61 +949,42 @@ function ItemCard({
 }: ItemCardProps) {
   return (
     <div className="border rounded-md p-4 hover:bg-secondary/20 transition-colors">
-      <div className="flex justify-between">
-        <div>
-          <div className="flex items-center">
-            <div className={`p-2 rounded-md mr-3 ${
-              item.type === "service" ? 'bg-blue-100 text-blue-700' : 
-              item.category === "beer" ? 'bg-yellow-100 text-yellow-700' :
-              item.category === "soda" ? 'bg-red-100 text-red-700' :
-              item.category === "water" ? 'bg-blue-100 text-blue-700' :
-              item.category === "coffee" ? 'bg-amber-100 text-amber-700' :
-              item.category === "energy" ? 'bg-purple-100 text-purple-700' :
-              'bg-amber-100 text-amber-700'
-            }`}>
-              {item.type === "service" ? (
-                <Scissors className="h-5 w-5" />
-              ) : categoryIcon}
-            </div>
-            
-            <div>
-              <h3 className="font-medium">{item.name}</h3>
-              <div className="flex items-center">
-                <Tag size={14} className="mr-1 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  {item.type === "service" ? "Serviço" : 
-                   item.category === "beer" ? "Cervejas" :
-                   item.category === "soda" ? "Refrigerantes" :
-                   item.category === "water" ? "Água" :
-                   item.category === "coffee" ? "Café" :
-                   item.category === "energy" ? "Energéticos" :
-                   "Produto"}
-                </span>
-              </div>
-            </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {item.type === "service" ? <Scissors className="h-5 w-5" /> : categoryIcon}
+            <span className="font-semibold text-lg">{item.name}</span>
           </div>
-          
-          <p className="text-sm mt-2">{item.description}</p>
-          
-          {item.type === "service" && item.duration && (
-            <div className="mt-2 text-sm">
-              <span className="font-medium">Duração:</span> {item.duration} minutos
-            </div>
-          )}
-          
-          {item.type === "product" && item.stock !== undefined && (
-            <div className="mt-2 text-sm">
-              <span className="font-medium">Estoque:</span> {item.stock} unidades
-            </div>
-          )}
+          <Button size="sm" variant="outline" onClick={() => onEdit(item)}>
+            Editar
+          </Button>
         </div>
-        
-        <div className="text-right">
-          <div className="text-lg font-bold">
-            R$ {item.price.toFixed(2)}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Tag size={14} className="mr-1" />
+          <span>
+            {item.type === "service" ? "Serviço" : 
+              item.category === "beer" ? "Cervejas" :
+              item.category === "soda" ? "Refrigerantes" :
+              item.category === "water" ? "Água" :
+              item.category === "coffee" ? "Café" :
+              item.category === "energy" ? "Energéticos" :
+              "Produto"}
+          </span>
+        </div>
+        <div className="mt-2 text-sm text-muted-foreground">{item.description}</div>
+        {item.type === "service" && item.duration && (
+          <div className="mt-2 text-sm">
+            <span className="font-medium">Duração:</span> {item.duration} minutos
           </div>
-          
-          <div className="mt-4 space-x-2">
+        )}
+        {item.type === "product" && item.stock !== undefined && (
+          <div className="mt-2 text-sm">
+            <span className="font-medium">Estoque:</span> {item.stock} unidades
+          </div>
+        )}
+        <div className="flex items-center justify-between mt-2">
+          <div className="text-lg font-bold">R$ {item.price.toFixed(2)}</div>
+          <div className="space-x-2">
             <Button variant="outline" size="sm" onClick={() => onEdit(item)}>
               Editar
             </Button>
