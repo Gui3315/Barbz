@@ -21,6 +21,7 @@ import LogsAtividades from "./pages/LogsAtividades";
 import Proprietario from "./pages/Proprietario";
 import Funcionamento from "./pages/Funcionamento";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import CreatePassword from "@/pages/CreatePassword";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
+            <Route path="/create-password" element={<CreatePassword />} />
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/agendamentos" element={<Agendamentos />} />

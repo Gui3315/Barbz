@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { v4 as uuidv4 } from 'uuid';
+import { supabase } from "@/lib/supabaseClient";
+// ATENÇÃO: inviteUserByEmail só funciona com chave de serviço (backend ou ambiente seguro)
 import { DashboardLayout } from "@/components/dashboard/layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,68 +33,65 @@ interface Client {
   preferences: string;
 }
 
-const initialClients: Client[] = [
-  {
-    id: 1,
-    name: "Carlos Silva",
-    phone: "(11) 99123-4567",
-    email: "carlos.silva@email.com",
-    lastVisit: "15/03/2023",
-    visits: 12,
-    loyaltyPoints: 35,
-    spent: 650.00,
-    preferences: "Corte degradê e barba desenhada"
-  },
-  {
-    id: 2,
-    name: "Roberto Almeida",
-    phone: "(11) 98765-4321",
-    email: "roberto.a@email.com",
-    lastVisit: "28/02/2023",
-    visits: 5,
-    loyaltyPoints: 15,
-    spent: 275.00,
-    preferences: "Prefere ser atendido pelo João"
-  },
-  {
-    id: 3,
-    name: "Lucas Mendes",
-    phone: "(11) 91122-3344",
-    email: "lucas.m@email.com",
-    lastVisit: "10/03/2023",
-    visits: 8,
-    loyaltyPoints: 24,
-    spent: 420.00,
-    preferences: "Alérgico a alguns produtos, verificar ficha"
-  },
-  {
-    id: 4,
-    name: "Fernando Costa",
-    phone: "(11) 95566-7788",
-    email: "fernando@email.com",
-    lastVisit: "05/03/2023",
-    visits: 3,
-    loyaltyPoints: 9,
-    spent: 165.00,
-    preferences: "Prefere horários no final da tarde"
-  },
-  {
-    id: 5,
-    name: "André Santos",
-    phone: "(11) 92233-4455",
-    email: "andre.santos@email.com", 
-    lastVisit: "20/03/2023",
-    visits: 15,
-    loyaltyPoints: 45,
-    spent: 825.00,
-    preferences: "Cliente VIP, sempre agendar com prioridade"
-  }
-];
+const initialClients: Client[] = [];
 
 export default function Proprietario() {
   const { toast } = useToast();
+  
+  // Estado para barbershop_id do proprietário
+  const [barbershopId, setBarbershopId] = useState<string>("");
+
+  // Função para criar barbearia e vincular ao perfil do proprietário
+  async function handleCreateBarbershop(nome: string, ownerId: string) {
+    const newBarbershopId = uuidv4();
+    // 1. Cria barbearia
+    const { error: barbershopError } = await (supabase as any).from('barbershops').insert({
+      id: newBarbershopId,
+      name: nome,
+      owner_id: ownerId,
+    });
+    if (barbershopError) {
+      toast({ title: "Erro ao criar barbearia", description: barbershopError.message, variant: "destructive" });
+      return;
+    }
+    // 2. Atualiza perfil do proprietário
+    const { error: profileError } = await (supabase as any).from('profiles').update({ barbershop_id: newBarbershopId }).eq('id', ownerId);
+    if (profileError) {
+      toast({ title: "Erro ao vincular perfil", description: profileError.message, variant: "destructive" });
+      return;
+    }
+    setBarbershopId(newBarbershopId);
+    toast({ title: "Barbearia criada", description: "Barbearia vinculada ao seu perfil." });
+  }
+
   const [searchTerm, setSearchTerm] = useState("");
   const [clients, setClients] = useState<Client[]>(initialClients);
+  // Função para buscar dados paralelamente e mapear para Client
+  async function carregarDados() {
+    try {
+      if (!barbershopId) return;
+      const [clientesRes] = await Promise.all([
+        (supabase as any).from('clients').select('*').eq('barbershop_id', barbershopId),
+        // Adicione outras queries aqui se necessário
+      ]);
+      if (clientesRes.error) throw clientesRes.error;
+      if (clientesRes.data) {
+        setClients(clientesRes.data.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          email: c.email,
+          lastVisit: c.last_visit_date || "",
+          visits: c.total_visits || 0,
+          loyaltyPoints: c.loyalty_points || 0,
+          spent: c.spent || 0,
+          preferences: typeof c.preferences === "string" ? c.preferences : "",
+        })));
+      }
+    } catch (err) {
+      console.error("Erro ao carregar dados:", err);
+    }
+  }
   const [newClientDialogOpen, setNewClientDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
   const [bookingMode, setBookingMode] = useState<"time" | "barber">("time");
@@ -121,29 +121,78 @@ export default function Proprietario() {
     });
   };
 
-  const handleAddClient = () => {
-    if (!newClient.name || !newClient.phone) {
+  // Máscara de telefone (XX) XXXXX-XXXX
+  function formatPhone(value: string) {
+    const digits = value.replace(/\D/g, '');
+    let formatted = '';
+    if (digits.length > 0) formatted += '(' + digits.substring(0, 2);
+    if (digits.length > 2) formatted += ') ' + digits.substring(2, 7);
+    if (digits.length > 7) formatted += '-' + digits.substring(7, 11);
+    return formatted;
+  }
+
+  async function handleAddClient() {
+    const phoneDigits = newClient.phone.replace(/\D/g, '');
+    if (phoneDigits.length !== 11) {
+      toast({
+        title: "Telefone inválido",
+        description: "Informe um telefone válido no formato (XX) XXXXX-XXXX",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!newClient.name || !newClient.phone || !newClient.email) {
       toast({
         title: "Campos obrigatórios",
-        description: "Nome e telefone são obrigatórios.",
+        description: "Nome, telefone e e-mail são obrigatórios.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Validação simples de e-mail
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newClient.email)) {
+      toast({
+        title: "E-mail inválido",
+        description: "Informe um e-mail válido.",
         variant: "destructive",
       });
       return;
     }
 
-    const client: Client = {
-      id: clients.length + 1,
+    // 1. Convidar usuário pelo Supabase (Invite User)
+    const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(newClient.email);
+
+    if (inviteError || !inviteData?.user) {
+      toast({
+        title: "Erro ao convidar usuário",
+        description: inviteError?.message || "Não foi possível enviar o convite.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // 2. Salvar dados na tabela clients
+    const { error: clientError } = await (supabase as any).from('clients').insert({
       name: newClient.name,
       phone: newClient.phone,
-      email: newClient.email || "",
-      lastVisit: "Nunca visitou",
-      visits: 0,
-      loyaltyPoints: 0,
-      spent: 0,
-      preferences: newClient.preferences || ""
-    };
+      email: newClient.email,
+      preferences: newClient.preferences,
+      is_invitation: true,
+      status: 'pending_password',
+      user_id: inviteData.user.id,
+      barbershop_id: barbershopId,
+    });
 
-    setClients([...clients, client]);
+    if (clientError) {
+      toast({
+        title: "Erro ao salvar cliente",
+        description: clientError.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setNewClient({
       name: "",
       phone: "",
@@ -153,10 +202,12 @@ export default function Proprietario() {
     setNewClientDialogOpen(false);
 
     toast({
-      title: "Cliente adicionado",
-      description: `${client.name} foi adicionado com sucesso.`,
+      title: "Convite enviado",
+      description: `${newClient.name} foi convidado e receberá um e-mail para criar a senha.`,
     });
-  };
+    // Atualiza lista de clientes após cadastro
+    carregarDados();
+  }
 
   const openBookingDialog = (client: Client) => {
     setSelectedClient(client);
@@ -181,44 +232,47 @@ export default function Proprietario() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h1 className="header-text">Clientes</h1>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Buscar cliente..." 
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex gap-2">
-              <div className="flex items-center rounded-md border border-input bg-transparent">
-                <Button
-                  variant={viewMode === "card" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-none rounded-l-md"
-                  onClick={() => setViewMode("card")}
-                >
-                  <Grid size={16} />
-                </Button>
-                <Button
-                  variant={viewMode === "list" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-none rounded-r-md"
-                  onClick={() => setViewMode("list")}
-                >
-                  <List size={16} />
-                </Button>
-              </div>
-              <Button 
-                className="btn-primary gap-2 whitespace-nowrap"
-                onClick={() => setNewClientDialogOpen(true)}
-              >
-                <Plus size={16} />
-                Novo Cliente
-              </Button>
-            </div>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input 
+            placeholder="Buscar cliente..." 
+            className="pl-10"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-2">
+          <div className="flex items-center rounded-md border border-input bg-transparent">
+            <Button
+              variant={viewMode === "card" ? "secondary" : "ghost"}
+              size="sm"
+              className="rounded-none rounded-l-md"
+              onClick={() => setViewMode("card")}
+            >
+              <Grid size={16} />
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="rounded-none rounded-r-md"
+              onClick={() => setViewMode("list")}
+            >
+              <List size={16} />
+            </Button>
           </div>
+          <Button 
+            className="btn-primary gap-2 whitespace-nowrap"
+            onClick={() => setNewClientDialogOpen(true)}
+          >
+            <Plus size={16} />
+            Novo Cliente
+          </Button>
+          <Button onClick={carregarDados} variant="outline">
+            Atualizar lista
+          </Button>
+        </div>
+      </div>
         </div>
 
         <Card className="barber-card">
@@ -514,10 +568,12 @@ export default function Proprietario() {
             <div className="space-y-2">
               <Label htmlFor="phone">Telefone *</Label>
               <Input
-                id="phone"
+                type="text"
+                placeholder="(XX) XXXXX-XXXX"
                 value={newClient.phone}
-                onChange={(e) => updateNewClientField('phone', e.target.value)}
-                placeholder="(00) 00000-0000"
+                onChange={e => updateNewClientField('phone', formatPhone(e.target.value))}
+                maxLength={15}
+                required
               />
             </div>
             

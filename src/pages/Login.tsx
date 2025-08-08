@@ -1,5 +1,5 @@
-
 import { useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +41,28 @@ function getErrorMessage(cnpjInfo: any) {
 }
 
 export default function Login() {
+  // Auto-complete barbearia para cliente
+  const [barbershopSearch, setBarbershopSearch] = useState("");
+  const [barbershopOptions, setBarbershopOptions] = useState<{ id: string; name: string }[]>([]);
+  const [loadingBarbershops, setLoadingBarbershops] = useState(false);
+  const [selectedBarbershop, setSelectedBarbershop] = useState<{ id: string; name: string } | null>(null);
+
+  async function searchBarbershops(query: string) {
+    setBarbershopSearch(query);
+    setLoadingBarbershops(true);
+    const { data, error } = await supabase
+      .from('barbershops')
+      .select('id, name')
+      .ilike('name', `%${query}%`)
+      .limit(10);
+    if (!error && data) {
+      setBarbershopOptions(data);
+    } else {
+      setBarbershopOptions([]);
+    }
+    setLoadingBarbershops(false);
+  }
+
   const [phone, setPhone] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
@@ -55,7 +77,7 @@ export default function Login() {
     if (digits.length > 5) formatted += '-' + digits.substring(5, 8);
     return formatted;
   }
-  const [mode, setMode] = useState<'login' | 'signup' | 'reset'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'reset' | 'resend'>('login');
   const [userType, setUserType] = useState<'cliente' | 'proprietario'>('cliente');
   const [cnpj, setCnpj] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -87,7 +109,8 @@ export default function Login() {
     setLoading(true);
     setError(null);
     setSuccess(null);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const emailNorm = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signInWithPassword({ email: emailNorm, password });
     if (error) {
       setError(error.message);
       setLoading(false);
@@ -166,6 +189,8 @@ export default function Login() {
     setError(null);
     setSuccess(null);
 
+    const emailNorm = email.trim().toLowerCase();
+
     // Validação do telefone
     const phoneDigits = phone.replace(/\D/g, '');
     if (phoneDigits.length !== 11) {
@@ -179,8 +204,15 @@ export default function Login() {
       setLoading(false);
       return;
     }
+    if (userType === 'cliente') {
+      if (!selectedBarbershop) {
+        setError('Selecione uma barbearia.');
+        setLoading(false);
+        return;
+      }
+    }
     if (userType === 'proprietario') {
-      // Valida CNPJ antes de cadastrar
+      // Valida CNPJ antes de cadastrar (BrasilAPI)
       const cnpjValido = await validarCNPJ(cnpj);
       if (!cnpjValido) {
         setError('CNPJ inválido ou inativo');
@@ -224,8 +256,45 @@ export default function Login() {
       }
     }
 
-    const { error } = await supabase.auth.signUp({
-      email,
+    // Validação: impedir cadastro com e-mail já existente (profiles pode já ter sido criado)
+    const { data: existingEmailProfile, error: emailCheckError } = await supabase
+      .from('profiles')
+      .select('id')
+      .ilike('email', emailNorm)
+      .maybeSingle();
+    if (emailCheckError) {
+      setError('Erro ao verificar e-mail existente: ' + emailCheckError.message);
+      setLoading(false);
+      return;
+    }
+    if (existingEmailProfile) {
+      setError('Já existe um cadastro com este e-mail. Faça login ou recupere sua senha.');
+      setLoading(false);
+      return;
+    }
+
+    // Validação: impedir cadastro com CNPJ já existente (relação 1:1 por CNPJ em profiles)
+    if (userType === 'proprietario') {
+      const { data: existingCnpjProfile, error: cnpjProfileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('cnpj', cnpj)
+        .maybeSingle();
+      if (cnpjProfileError) {
+        setError('Erro ao verificar CNPJ existente: ' + cnpjProfileError.message);
+        setLoading(false);
+        return;
+      }
+      if (existingCnpjProfile) {
+        setError('Já existe um cadastro de proprietário com este CNPJ.');
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Cadastro do usuário
+    const { data: signUpData, error } = await supabase.auth.signUp({
+      email: emailNorm,
       password,
       options: {
         data: {
@@ -239,28 +308,67 @@ export default function Login() {
           state: userType === 'proprietario' ? state : '',
           cep: userType === 'proprietario' ? cep : '',
           status: 'ativo',
+          barbershop_id: userType === 'cliente' && selectedBarbershop ? selectedBarbershop.id : '',
         },
         emailRedirectTo: window.location.origin + '/'
       }
     });
     if (error) {
       setError(error.message);
-    } else {
-      setSuccess('Cadastro realizado! Verifique seu email para confirmar.');
-      setMode('login');
-      setEmail('');
-      setPassword('');
-      setName('');
-      setCnpj('');
-      setPhone('');
-      setBusinessName('');
-      setAddress('');
-      setCity('');
-      setState('');
-      setCep('');
-      setCnpjStatus('idle');
-      setCnpjInfo(null);
+      setLoading(false);
+      return;
     }
+
+    // Se proprietário, criar barbearia e vincular (apenas se não existir uma para este owner_id)
+    if (userType === 'proprietario' && signUpData?.user?.id) {
+      const ownerId = signUpData.user.id;
+      // Checagem 1: garantir 1:1 por owner_id (impede múltiplas barbearias para o mesmo proprietário)
+      const { data: existingShop, error: ownerShopError } = await supabase
+        .from('barbershops')
+        .select('id')
+        .eq('owner_id', ownerId)
+        .maybeSingle();
+      if (ownerShopError) {
+        setError('Erro ao verificar barbearia existente do proprietário: ' + ownerShopError.message);
+        setLoading(false);
+        return;
+      }
+      if (existingShop) {
+        setError('Já existe uma barbearia para este proprietário. Relação 1:1 por proprietário.');
+        setLoading(false);
+        return;
+      }
+
+      const newBarbershopId = uuidv4();
+      const { error: barbershopError } = await supabase.from('barbershops').insert({
+        id: newBarbershopId,
+        name: businessName,
+        owner_id: ownerId
+      });
+      if (barbershopError) {
+        setError('Erro ao criar barbearia: ' + barbershopError.message);
+        setLoading(false);
+        return;
+      }
+    }
+
+    setSuccess('Cadastro realizado! Verifique seu email para confirmar.');
+    setMode('login');
+    setEmail('');
+    setPassword('');
+    setName('');
+    setCnpj('');
+    setPhone('');
+    setBusinessName('');
+    setAddress('');
+    setCity('');
+    setState('');
+    setCep('');
+    setCnpjStatus('idle');
+    setCnpjInfo(null);
+    setBarbershopSearch("");
+    setBarbershopOptions([]);
+    setSelectedBarbershop(null);
     setLoading(false);
   };
 
@@ -270,7 +378,8 @@ export default function Login() {
     setLoading(true);
     setError(null);
     setSuccess(null);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const emailNorm = email.trim().toLowerCase();
+    const { error } = await supabase.auth.resetPasswordForEmail(emailNorm, {
       redirectTo: window.location.origin + '/'
     });
     if (error) {
@@ -292,6 +401,7 @@ export default function Login() {
             {mode === 'login' && 'Entrar'}
             {mode === 'signup' && 'Cadastro'}
             {mode === 'reset' && 'Recuperar Senha'}
+            {mode === 'resend' && 'Reenviar Email de Confirmação'}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -334,6 +444,9 @@ export default function Login() {
                 {loading ? 'Entrando...' : 'Entrar'}
               </Button>
               <div className="flex justify-between mt-2 text-sm">
+                <button type="button" className="text-blue-600 hover:underline" onClick={() => { setMode('resend'); setError(null); setSuccess(null); }}>
+                  Reenviar email de confirmação
+                </button>
                 <button type="button" className="text-blue-600 hover:underline" onClick={() => { setMode('signup'); setError(null); setSuccess(null); }}>
                   Criar conta
                 </button>
@@ -367,6 +480,44 @@ export default function Login() {
                 onChange={e => setEmail(e.target.value)}
                 required
               />
+              {/* Auto-complete barbearia para cliente */}
+              {userType === 'cliente' && (
+                <div className="space-y-2">
+                  <label htmlFor="barbershop" className="text-sm font-medium">Barbearia *</label>
+                  <Input
+                    id="barbershop"
+                    value={barbershopSearch}
+                    onChange={e => searchBarbershops(e.target.value)}
+                    placeholder="Digite para buscar barbearia..."
+                    autoComplete="off"
+                  />
+                  <div className="relative">
+                    {loadingBarbershops && (
+                      <div className="text-xs text-muted-foreground">Buscando...</div>
+                    )}
+                    {!loadingBarbershops && barbershopOptions.length > 0 && (
+                      <div className="absolute z-10 bg-white border rounded shadow w-full mt-1">
+                        {barbershopOptions.map(option => (
+                          <div
+                            key={option.id}
+                            className={`px-3 py-2 cursor-pointer hover:bg-secondary ${selectedBarbershop?.id === option.id ? 'bg-secondary' : ''}`}
+                            onClick={() => {
+                              setSelectedBarbershop(option);
+                              setBarbershopSearch(option.name);
+                              setBarbershopOptions([]);
+                            }}
+                          >
+                            {option.name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {selectedBarbershop && (
+                    <div className="text-xs text-green-600 mt-1">Selecionado: {selectedBarbershop.name}</div>
+                  )}
+                </div>
+              )}
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
@@ -480,6 +631,53 @@ export default function Login() {
               {success && <div className="text-green-600 text-sm">{success}</div>}
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Enviando...' : 'Enviar link de recuperação'}
+              </Button>
+              <div className="flex justify-center mt-2 text-sm">
+                <button type="button" className="text-blue-600 hover:underline" onClick={() => { setMode('login'); setError(null); setSuccess(null); }}>
+                  Voltar ao login
+                </button>
+              </div>
+            </form>
+          )}
+          {mode === 'resend' && (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                setError(null);
+                setSuccess(null);
+                const emailNorm = email.trim().toLowerCase();
+                try {
+                  const { error: resendError } = await supabase.auth.resend({
+                    type: 'signup',
+                    email: emailNorm,
+                    options: {
+                      emailRedirectTo: window.location.origin + '/',
+                    },
+                  });
+                  if (resendError) {
+                    // opcional: log
+                  }
+                  setSuccess('Se este e-mail existir e ainda não estiver confirmado, reenviamos o link de confirmação.');
+                } catch (err) {
+                  setSuccess('Se este e-mail existir e ainda não estiver confirmado, reenviamos o link de confirmação.');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="space-y-4"
+            >
+              <Input
+                type="email"
+                placeholder="Digite seu e-mail"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+              />
+              {error && <div className="text-red-500 text-sm">{error}</div>}
+              {success && <div className="text-green-600 text-sm">{success}</div>}
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? 'Enviando...' : 'Reenviar e-mail de confirmação'}
               </Button>
               <div className="flex justify-center mt-2 text-sm">
                 <button type="button" className="text-blue-600 hover:underline" onClick={() => { setMode('login'); setError(null); setSuccess(null); }}>
