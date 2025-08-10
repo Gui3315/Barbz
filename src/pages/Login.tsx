@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Logo } from '@/components/ui/logo';
+import { useNavigate } from 'react-router-dom';
 
 // Máscara de telefone (XX) XXXXX-XXXX
 function formatPhone(value: string) {
@@ -41,28 +41,7 @@ function getErrorMessage(cnpjInfo: any) {
 }
 
 export default function Login() {
-  // Auto-complete barbearia para cliente
-  const [barbershopSearch, setBarbershopSearch] = useState("");
-  const [barbershopOptions, setBarbershopOptions] = useState<{ id: string; name: string }[]>([]);
-  const [loadingBarbershops, setLoadingBarbershops] = useState(false);
-  const [selectedBarbershop, setSelectedBarbershop] = useState<{ id: string; name: string } | null>(null);
-
-  async function searchBarbershops(query: string) {
-    setBarbershopSearch(query);
-    setLoadingBarbershops(true);
-    const { data, error } = await supabase
-      .from('barbershops')
-      .select('id, name')
-      .ilike('name', `%${query}%`)
-      .limit(10);
-    if (!error && data) {
-      setBarbershopOptions(data);
-    } else {
-      setBarbershopOptions([]);
-    }
-    setLoadingBarbershops(false);
-  }
-
+  const navigate = useNavigate();
   const [phone, setPhone] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [address, setAddress] = useState('');
@@ -135,9 +114,9 @@ export default function Login() {
       return;
     }
     if (profileData.user_type === 'proprietario') {
-      window.location.href = '/proprietario';
+      navigate('/proprietario');
     } else {
-      window.location.href = '/cliente';
+      navigate('/cliente');
     }
     setLoading(false);
   };
@@ -205,11 +184,7 @@ export default function Login() {
       return;
     }
     if (userType === 'cliente') {
-      if (!selectedBarbershop) {
-        setError('Selecione uma barbearia.');
-        setLoading(false);
-        return;
-      }
+      // Removido: validação de barbearia para cliente
     }
     if (userType === 'proprietario') {
       // Valida CNPJ antes de cadastrar (BrasilAPI)
@@ -308,48 +283,15 @@ export default function Login() {
           state: userType === 'proprietario' ? state : '',
           cep: userType === 'proprietario' ? cep : '',
           status: 'ativo',
-          barbershop_id: userType === 'cliente' && selectedBarbershop ? selectedBarbershop.id : '',
+          // não enviar barbershop_id no metadata do cliente
         },
-        emailRedirectTo: window.location.origin + '/'
-      }
+        emailRedirectTo: window.location.origin + '/',
+      },
     });
     if (error) {
       setError(error.message);
       setLoading(false);
       return;
-    }
-
-    // Se proprietário, criar barbearia e vincular (apenas se não existir uma para este owner_id)
-    if (userType === 'proprietario' && signUpData?.user?.id) {
-      const ownerId = signUpData.user.id;
-      // Checagem 1: garantir 1:1 por owner_id (impede múltiplas barbearias para o mesmo proprietário)
-      const { data: existingShop, error: ownerShopError } = await supabase
-        .from('barbershops')
-        .select('id')
-        .eq('owner_id', ownerId)
-        .maybeSingle();
-      if (ownerShopError) {
-        setError('Erro ao verificar barbearia existente do proprietário: ' + ownerShopError.message);
-        setLoading(false);
-        return;
-      }
-      if (existingShop) {
-        setError('Já existe uma barbearia para este proprietário. Relação 1:1 por proprietário.');
-        setLoading(false);
-        return;
-      }
-
-      const newBarbershopId = uuidv4();
-      const { error: barbershopError } = await supabase.from('barbershops').insert({
-        id: newBarbershopId,
-        name: businessName,
-        owner_id: ownerId
-      });
-      if (barbershopError) {
-        setError('Erro ao criar barbearia: ' + barbershopError.message);
-        setLoading(false);
-        return;
-      }
     }
 
     setSuccess('Cadastro realizado! Verifique seu email para confirmar.');
@@ -366,9 +308,6 @@ export default function Login() {
     setCep('');
     setCnpjStatus('idle');
     setCnpjInfo(null);
-    setBarbershopSearch("");
-    setBarbershopOptions([]);
-    setSelectedBarbershop(null);
     setLoading(false);
   };
 
@@ -380,7 +319,7 @@ export default function Login() {
     setSuccess(null);
     const emailNorm = email.trim().toLowerCase();
     const { error } = await supabase.auth.resetPasswordForEmail(emailNorm, {
-      redirectTo: window.location.origin + '/'
+      redirectTo: window.location.origin + '/create-password'
     });
     if (error) {
       setError(error.message);
@@ -480,44 +419,6 @@ export default function Login() {
                 onChange={e => setEmail(e.target.value)}
                 required
               />
-              {/* Auto-complete barbearia para cliente */}
-              {userType === 'cliente' && (
-                <div className="space-y-2">
-                  <label htmlFor="barbershop" className="text-sm font-medium">Barbearia *</label>
-                  <Input
-                    id="barbershop"
-                    value={barbershopSearch}
-                    onChange={e => searchBarbershops(e.target.value)}
-                    placeholder="Digite para buscar barbearia..."
-                    autoComplete="off"
-                  />
-                  <div className="relative">
-                    {loadingBarbershops && (
-                      <div className="text-xs text-muted-foreground">Buscando...</div>
-                    )}
-                    {!loadingBarbershops && barbershopOptions.length > 0 && (
-                      <div className="absolute z-10 bg-white border rounded shadow w-full mt-1">
-                        {barbershopOptions.map(option => (
-                          <div
-                            key={option.id}
-                            className={`px-3 py-2 cursor-pointer hover:bg-secondary ${selectedBarbershop?.id === option.id ? 'bg-secondary' : ''}`}
-                            onClick={() => {
-                              setSelectedBarbershop(option);
-                              setBarbershopSearch(option.name);
-                              setBarbershopOptions([]);
-                            }}
-                          >
-                            {option.name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {selectedBarbershop && (
-                    <div className="text-xs text-green-600 mt-1">Selecionado: {selectedBarbershop.name}</div>
-                  )}
-                </div>
-              )}
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}

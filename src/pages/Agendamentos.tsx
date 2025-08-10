@@ -6,92 +6,215 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar as CalendarIcon, Clock, Plus, User } from "lucide-react";
-import { useState } from "react";
-import { format } from "date-fns";
+import { useEffect, useState } from "react";
+import { format, addMinutes } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabaseClient";
+// ...existing code...
 
-// Types for appointments
+// Types for appointments, barbers, and services
 interface Appointment {
-  id: number;
-  clientName: string;
-  service: string;
-  time: string;
-  duration: number;
-  barber: string;
+  id: string;
+  user_id: string;
+  client_id: string;
+  barber_id: string;
+  service_id: string;
   status: "confirmed" | "pending";
-  date: string;
+  total_price?: string;
+  created_at: string;
+  updated_at: string;
+  barbershop_id?: string;
+  start_at: string; // timestamp
+  end_at?: string;
+  service?: Service;
+  barber?: Barber;
+  client?: Client;
 }
 
-// Mocked barbers
-const barbers = [
-  { id: 1, name: "João Barber" },
-  { id: 2, name: "Pedro Barbeiro" },
-  { id: 3, name: "Marcos Silva" },
-];
+interface Client {
+  id: string;
+  name: string;
+}
 
-// Horários dinâmicos conforme funcionamento do salão
+interface Barber {
+  id: string;
+  name: string;
+  // outros campos ignorados
+}
+
+interface Service {
+  id: string;
+  name: string;
+  duration_minutes: number;
+  price: string;
+}
+
 import { salonSchedule, generateTimeSlots } from "@/config/salonSchedule";
-
-// Available services
-import { initialProducts } from "./Produtos";
-// Sincroniza serviços com Produtos.tsx
-const services = initialProducts.filter(p => p.type === "service");
 
 export default function Agendamentos() {
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [selectedBarber, setSelectedBarber] = useState<number | null>(null);
-  const [selectedService, setSelectedService] = useState<number | null>(null);
+  const [selectedBarber, setSelectedBarber] = useState<string | null>(null);
+  const [selectedService, setSelectedService] = useState<string | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [clientName, setClientName] = useState("");
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
-  
-  // State for appointments
-  const [appointments, setAppointments] = useState<Appointment[]>([
-    {
-      id: 1,
-      clientName: "Carlos Silva",
-      service: "Corte + Barba",
-      time: "10:00",
-      duration: 45,
-      barber: "João Barber",
-      status: "confirmed",
-      date: format(new Date(), "dd/MM/yyyy")
-    },
-    {
-      id: 2,
-      clientName: "Roberto Almeida",
-      service: "Corte Degradê",
-      time: "11:30",
-      duration: 30,
-      barber: "Pedro Barbeiro",
-      status: "confirmed",
-      date: format(new Date(), "dd/MM/yyyy")
-    },
-    {
-      id: 3,
-      clientName: "Lucas Mendes",
-      service: "Barba Completa",
-      time: "13:15",
-      duration: 20,
-      barber: "João Barber",
-      status: "pending",
-      date: format(new Date(), "dd/MM/yyyy")
-    },
-  ]);
-  
+
+  // Dados reais do banco
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [barbers, setBarbers] = useState<Barber[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Horários disponíveis para o barbeiro/serviço/data selecionados
+  const [availableTimes, setAvailableTimes] = useState<string[]>([]);
+  const [loadingTimes, setLoadingTimes] = useState(false);
+  // Função para gerar horários disponíveis considerando agendamentos existentes
+  useEffect(() => {
+    const fetchAvailableTimes = async () => {
+      setLoadingTimes(true);
+      setAvailableTimes([]);
+      if (!selectedDate || !selectedBarber || !selectedService) {
+        setLoadingTimes(false);
+        return;
+      }
+      // Buscar duração do serviço
+      const service = services.find(s => s.id === selectedService);
+      const duration = service ? service.duration_minutes : 30;
+      // Gerar slots possíveis do dia
+      const diasSemana = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
+      const diaSelecionado = diasSemana[selectedDate.getDay()];
+      const configDia = salonSchedule.find(d => d.day === diaSelecionado);
+      if (!configDia || !configDia.active) {
+        setAvailableTimes([]);
+        setLoadingTimes(false);
+        return;
+      }
+      const slots = generateTimeSlots(configDia.open, configDia.close);
+      // Buscar agendamentos do barbeiro para o dia
+      const year = selectedDate.getUTCFullYear();
+      const month = String(selectedDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getUTCDate()).padStart(2, '0');
+      const startUTC = `${year}-${month}-${day}T00:00:00+00:00`;
+      const nextDay = new Date(Date.UTC(year, Number(month) - 1, Number(day) + 1));
+      const nextYear = nextDay.getUTCFullYear();
+      const nextMonth = String(nextDay.getUTCMonth() + 1).padStart(2, '0');
+      const nextDayStr = String(nextDay.getUTCDate()).padStart(2, '0');
+      const endUTC = `${nextYear}-${nextMonth}-${nextDayStr}T00:00:00+00:00`;
+      const { data: dayAppointments, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('barber_id', selectedBarber)
+        .gte('start_at', startUTC)
+        .lt('start_at', endUTC)
+        .in('status', ['confirmed', 'pending']);
+      if (error) {
+        setAvailableTimes(slots);
+        setLoadingTimes(false);
+        return;
+      }
+      // Marcar horários ocupados
+      const occupied: Set<string> = new Set();
+      (dayAppointments || []).forEach((appt: any) => {
+        const apptStart = new Date(appt.start_at);
+        const apptEnd = appt.end_at ? new Date(appt.end_at) : new Date(apptStart.getTime() + duration * 60000);
+        slots.forEach((slot) => {
+          // slot: 'HH:mm'. Usar timezone local (não UTC) para comparar corretamente
+          const [h, m] = slot.split(":");
+          // new Date(ano, mes, dia, hora, minuto) => local time
+          const slotDate = new Date(year, Number(month) - 1, Number(day), Number(h), Number(m));
+          if (slotDate >= apptStart && slotDate < apptEnd) {
+            occupied.add(slot);
+          }
+        });
+      });
+      // Filtrar slots disponíveis
+      const available = slots.filter(slot => !occupied.has(slot));
+      setAvailableTimes(available);
+      setLoadingTimes(false);
+    };
+    fetchAvailableTimes();
+  }, [selectedDate, selectedBarber, selectedService, services]);
+
+  // Buscar dados do Supabase
+useEffect(() => {
+  const fetchData = async () => {
+    setLoading(true);
+    // Buscar barbeiros
+    const { data: barbersData } = await supabase.from('barbers').select('*');
+    setBarbers((barbersData || []).map((b: any) => ({ id: b.id, name: b.name })));
+    // Buscar serviços
+    const { data: servicesData } = await supabase.from('services').select('*');
+    setServices((servicesData || []).map((s: any) => ({ id: s.id, name: s.name, duration_minutes: s.duration_minutes, price: s.price })));
+    // Buscar clientes
+    const { data: clientsData } = await supabase.from('clients').select('id, name');
+    setClients(clientsData || []);
+    // Buscar agendamentos apenas do dia selecionado
+    let appointmentsData = [];
+    if (selectedDate) {
+      // Garantir busca do dia inteiro em UTC
+      const year = selectedDate.getUTCFullYear();
+      const month = String(selectedDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getUTCDate()).padStart(2, '0');
+      const startUTC = `${year}-${month}-${day}T00:00:00+00:00`;
+      // Próximo dia para o filtro <
+      const nextDay = new Date(Date.UTC(year, Number(month) - 1, Number(day) + 1));
+      const nextYear = nextDay.getUTCFullYear();
+      const nextMonth = String(nextDay.getUTCMonth() + 1).padStart(2, '0');
+      const nextDayStr = String(nextDay.getUTCDate()).padStart(2, '0');
+      const endUTC = `${nextYear}-${nextMonth}-${nextDayStr}T00:00:00+00:00`;
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .gte('start_at', startUTC)
+        .lt('start_at', endUTC);
+      if (error) {
+        setAppointments([]);
+        setLoading(false);
+        return;
+      }
+      appointmentsData = data || [];
+    }
+    // Buscar appointment_services para os appointments do dia
+    const appointmentIds = (appointmentsData || []).map((a: any) => a.id);
+    let appointmentServicesData: any[] = [];
+    if (appointmentIds.length > 0) {
+      const { data: asData } = await supabase
+        .from('appointment_services')
+        .select('appointment_id, service_id')
+        .in('appointment_id', appointmentIds);
+      appointmentServicesData = asData || [];
+    }
+    // Mapeamento manual para preencher nome do cliente, serviço (via appointment_services) e barbeiro
+    setAppointments(
+      (appointmentsData || []).map((a: any) => {
+        const appService = appointmentServicesData.find((as) => as.appointment_id === a.id);
+        const service = appService ? servicesData?.find((s: any) => s.id === appService.service_id) : null;
+        return {
+          ...a,
+          client: clientsData?.find((c: any) => c.id === a.client_id) || null,
+          service: service || null,
+          barber: barbersData?.find((b: any) => b.id === a.barber_id) || null,
+        };
+      })
+    );
+    setLoading(false);
+  };
+  fetchData();
+}, [selectedDate]);
+
   const resetNewAppointment = () => {
     setSelectedBarber(null);
     setSelectedService(null);
     setSelectedTime(null);
-    setClientName("");
+    setClientId(null);
   };
 
-  const handleCreateAppointment = () => {
-    // Validate form
-    if (!clientName || !selectedBarber || !selectedService || !selectedTime || !selectedDate) {
+  const handleCreateAppointment = async () => {
+    if (!clientId || !selectedBarber || !selectedService || !selectedTime || !selectedDate) {
       toast({
         title: "Campos obrigatórios",
         description: "Preencha todos os campos obrigatórios.",
@@ -99,70 +222,134 @@ export default function Agendamentos() {
       });
       return;
     }
-    
-    // Get selected service and barber details
-    const serviceData = services.find(s => s.id === selectedService);
-    const barberData = barbers.find(b => b.id === selectedBarber);
-    
-    if (!serviceData || !barberData) return;
-    
-    // Create new appointment
-    const newAppointment: Appointment = {
-      id: appointments.length + 1,
-      clientName,
-      service: serviceData.name,
-      time: selectedTime,
-      duration: serviceData.duration,
-      barber: barberData.name,
-      status: "pending",
-      date: format(selectedDate, "dd/MM/yyyy")
-    };
-    
-    // Add appointment to the list
-    setAppointments([...appointments, newAppointment]);
-    
-    // Show success message
+    // Buscar usuário logado
+    const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null;
+    const user_id = user?.id || null;
+    if (!user_id) {
+      toast({
+        title: "Usuário não autenticado",
+        description: "Faça login para criar agendamentos.",
+        variant: "destructive"
+      });
+      return;
+    }
+    // Montar start_at (data + hora escolhida) com offset UTC-3
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const start_at = `${dateStr}T${selectedTime}:00-03:00`;
+    // Calcular end_at com base na duração do serviço
+    const service = services.find(s => s.id === selectedService);
+    const duration = service ? service.duration_minutes : 30;
+    const total_price = service ? Number(service.price) : 0;
+    const [h, m] = selectedTime.split(":");
+    const endDate = new Date(selectedDate);
+    endDate.setHours(Number(h), Number(m) + duration, 0, 0);
+    const end_at = format(endDate, "yyyy-MM-dd'T'HH:mm:ssXXX");
+    // Buscar barbershop_id na tabela barbershops onde owner_id = user_id
+    let barbershop_id = null;
+    if (user_id) {
+      const { data: barbershopData } = await supabase.from('barbershops').select('id').eq('owner_id', user_id).single();
+      barbershop_id = barbershopData?.id || null;
+    }
+    // Chamar a função RPC create_appointment
+    const { error } = await supabase.rpc('create_appointment', {
+      p_barbershop_id: barbershop_id,
+      p_start_at: start_at,
+      p_service_ids: [selectedService],
+      p_client_id: clientId,
+      p_barber_id: selectedBarber,
+      p_notes: null,
+    });
+    if (error) {
+      toast({
+        title: "Erro ao criar agendamento",
+        description: error?.message || 'Erro ao criar agendamento',
+        variant: "destructive"
+      });
+      return;
+    }
     toast({
       title: "Agendamento criado",
-      description: `Agendamento para ${clientName} foi criado com sucesso.`,
+      description: `Agendamento criado com sucesso.`,
     });
-    
-    // Close sheet and reset form
     setSheetOpen(false);
     resetNewAppointment();
+    // Refetch agendamentos do dia selecionado
+    if (selectedDate) {
+      const year = selectedDate.getUTCFullYear();
+      const month = String(selectedDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getUTCDate()).padStart(2, '0');
+      const startUTC = `${year}-${month}-${day}T00:00:00+00:00`;
+      const nextDay = new Date(Date.UTC(year, Number(month) - 1, Number(day) + 1));
+      const nextYear = nextDay.getUTCFullYear();
+      const nextMonth = String(nextDay.getUTCMonth() + 1).padStart(2, '0');
+      const nextDayStr = String(nextDay.getUTCDate()).padStart(2, '0');
+      const endUTC = `${nextYear}-${nextMonth}-${nextDayStr}T00:00:00+00:00`;
+      const { data: appointmentsData } = await supabase
+        .from('appointments')
+        .select('*')
+        .gte('start_at', startUTC)
+        .lt('start_at', endUTC);
+      // Buscar appointment_services para os appointments do dia
+      const appointmentIds = (appointmentsData || []).map((a: any) => a.id);
+      let appointmentServicesData: any[] = [];
+      if (appointmentIds.length > 0) {
+        const { data: asData } = await supabase
+          .from('appointment_services')
+          .select('appointment_id, service_id')
+          .in('appointment_id', appointmentIds);
+        appointmentServicesData = asData || [];
+      }
+      // Buscar clientes, barbeiros, serviços
+      const { data: barbersData } = await supabase.from('barbers').select('*');
+      const { data: servicesData } = await supabase.from('services').select('*');
+      const { data: clientsData } = await supabase.from('clients').select('id, name');
+      setAppointments(
+        (appointmentsData || []).map((a: any) => {
+          const appService = appointmentServicesData.find((as) => as.appointment_id === a.id);
+          const service = appService ? servicesData?.find((s: any) => s.id === appService.service_id) : null;
+          return {
+            ...a,
+            client: clientsData?.find((c: any) => c.id === a.client_id) || null,
+            service: service || null,
+            barber: barbersData?.find((b: any) => b.id === a.barber_id) || null,
+          };
+        })
+      );
+    }
   };
-  
-  // Filter appointments by the selected date
+
+  // Filtrar agendamentos por data (usando start_at)
   const filteredAppointments = appointments.filter(appointment => {
     if (!selectedDate) return true;
-    return appointment.date === format(selectedDate, "dd/MM/yyyy");
+    // start_at pode ser string ISO, comparar só a data (yyyy-MM-dd)
+    const apptDate = appointment.start_at ? appointment.start_at.slice(0, 10) : '';
+    const selected = format(selectedDate, "yyyy-MM-dd");
+    return apptDate === selected;
   });
-  
-  const confirmedAppointments = filteredAppointments.filter(a => a.status === "confirmed");
-  const pendingAppointments = filteredAppointments.filter(a => a.status === "pending");
-  
-  // Handle appointment status change
-  const handleConfirmAppointment = (id: number) => {
-    setAppointments(appointments.map(appointment => {
-      if (appointment.id === id) {
-        return {...appointment, status: "confirmed"};
-      }
-      return appointment;
-    }));
-    
-    toast({
-      title: "Agendamento confirmado",
-      description: "O agendamento foi confirmado com sucesso."
-    });
+  const confirmedAppointments = filteredAppointments.filter(a => a.status === "confirmed" || a.status === null);
+  const pendingAppointments: Appointment[] = [];
+
+  // Atualizar status do agendamento
+  const handleConfirmAppointment = async (id: string) => {
+    const { error } = await supabase.from('appointments').update({ status: 'confirmed' }).eq('id', id);
+    if (!error) {
+      setAppointments(appointments.map(appointment => appointment.id === id ? { ...appointment, status: 'confirmed' } : appointment));
+      toast({
+        title: "Agendamento confirmado",
+        description: "O agendamento foi confirmado com sucesso."
+      });
+    }
   };
-  
-  const handleCancelAppointment = (id: number) => {
-    setAppointments(appointments.filter(appointment => appointment.id !== id));
-    
-    toast({
-      title: "Agendamento cancelado",
-      description: "O agendamento foi cancelado com sucesso."
-    });
+
+  const handleCancelAppointment = async (id: string) => {
+    const { error } = await supabase.from('appointments').delete().eq('id', id);
+    if (!error) {
+      setAppointments(appointments.filter(appointment => appointment.id !== id));
+      toast({
+        title: "Agendamento cancelado",
+        description: "O agendamento foi cancelado com sucesso."
+      });
+    }
   };
 
   return (
@@ -185,17 +372,19 @@ export default function Agendamentos() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Cliente</label>
                   <div className="relative">
-                    <Input 
-                      type="text" 
-                      placeholder="Nome do cliente" 
-                      className="pl-10"
-                      value={clientName}
-                      onChange={(e) => setClientName(e.target.value)}
-                    />
-                    <User className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <select
+                      className="pl-3 pr-8 py-2 border rounded w-full"
+                      value={clientId || ''}
+                      onChange={e => setClientId(e.target.value)}
+                    >
+                      <option value="">Selecione o cliente</option>
+                      {clients.map(client => (
+                        <option key={client.id} value={client.id}>{client.name}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
-                
+
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Data</label>
                   <Calendar
@@ -239,10 +428,10 @@ export default function Agendamentos() {
                         <span>{service.name}</span>
                         <div className="flex justify-between w-full mt-1">
                           <span className="text-xs opacity-80">
-                            {service.duration} min
+                            {service.duration_minutes} min
                           </span>
                           <span className="text-xs opacity-80">
-                            R$ {service.price.toFixed(2)}
+                            R$ {Number(service.price).toFixed(2)}
                           </span>
                         </div>
                       </Button>
@@ -252,15 +441,13 @@ export default function Agendamentos() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Horário</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {(() => {
-                      // Descobre o dia da semana selecionado
-                      const diasSemana = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"];
-                      const diaSelecionado = selectedDate ? diasSemana[selectedDate.getDay()] : null;
-                      const configDia = salonSchedule.find(d => d.day === diaSelecionado);
-                      if (!configDia || !configDia.active) return <span className="col-span-4 text-muted-foreground">Salão fechado</span>;
-                      const slots = generateTimeSlots(configDia.open, configDia.close);
-                      return slots.map((time) => (
+                  <div className="grid grid-cols-4 gap-2 min-h-10">
+                    {loadingTimes ? (
+                      <span className="col-span-4 text-muted-foreground">Carregando horários...</span>
+                    ) : availableTimes.length === 0 ? (
+                      <span className="col-span-4 text-muted-foreground">Nenhum horário disponível</span>
+                    ) : (
+                      availableTimes.map((time) => (
                         <Button
                           key={time}
                           type="button"
@@ -270,14 +457,14 @@ export default function Agendamentos() {
                         >
                           {time}
                         </Button>
-                      ));
-                    })()}
+                      ))
+                    )}
                   </div>
                 </div>
 
                 <Button 
                   className="w-full mt-6 btn-primary"
-                  disabled={!selectedBarber || !selectedService || !selectedTime || !clientName}
+                  disabled={!selectedBarber || !selectedService || !selectedTime || !clientId}
                   onClick={handleCreateAppointment}
                 >
                   Confirmar Agendamento
@@ -296,146 +483,52 @@ export default function Agendamentos() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Tabs defaultValue="all">
-                <TabsList className="mb-4">
-                  <TabsTrigger value="all">Todos</TabsTrigger>
-                  <TabsTrigger value="confirmed">Confirmados</TabsTrigger>
-                  <TabsTrigger value="pending">Pendentes</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="all" className="space-y-3">
-                  {filteredAppointments.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p>Nenhum agendamento encontrado para esta data.</p>
+              {loading ? (
+                <div className="text-center py-8">Carregando...</div>
+              ) : (
+                filteredAppointments.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p>Nenhum agendamento encontrado para esta data.</p>
+                  </div>
+                ) : (
+                filteredAppointments.map((appointment, idx) => (
+                  <div
+                    key={appointment.id}
+                    className={`p-3 border rounded-md flex items-center justify-between ${
+                      appointment.status === 'pending' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'
+                    }${idx !== 0 ? ' mt-3' : ''}`}
+                  >
+                    <div className="flex items-center">
+                      <div className="h-10 w-10 rounded-full bg-barber flex items-center justify-center text-white">
+                        {appointment.client?.name
+                          ? appointment.client.name.split(' ').map((name: string) => name[0]).join('')
+                          : 'C'}
+                      </div>
+                      <div className="ml-3">
+                        <div className="font-medium">{appointment.client?.name || 'Cliente'}</div>
+                        <div className="text-sm text-muted-foreground">{appointment.service?.name || 'Serviço selecionado'}</div>
+                      </div>
                     </div>
-                  ) : (
-                    filteredAppointments.map((appointment) => (
-                      <div 
-                        key={appointment.id}
-                        className={`p-3 border rounded-md flex items-center justify-between ${
-                          appointment.status === 'pending' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'
-                        }`}
-                      >
+                    <div className="flex items-center">
+                      <div className="text-right mr-4">
                         <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-full bg-barber flex items-center justify-center text-white">
-                            {appointment.clientName.split(' ').map(name => name[0]).join('')}
-                          </div>
-                          <div className="ml-3">
-                            <div className="font-medium">{appointment.clientName}</div>
-                            <div className="text-sm text-muted-foreground">{appointment.service}</div>
-                          </div>
+                          <Clock size={14} className="mr-1" />
+                          {/* Exibe horário formatado */}
+                          <span>{appointment.start_at ? new Date(appointment.start_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</span>
                         </div>
-                        <div className="flex items-center">
-                          <div className="text-right mr-4">
-                            <div className="flex items-center">
-                              <Clock size={14} className="mr-1" />
-                              <span>{appointment.time}</span>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {appointment.barber}
-                            </div>
-                          </div>
-                          <Button variant="outline" size="sm">Detalhes</Button>
+                        <div className="text-sm text-muted-foreground">
+                          {appointment.barber?.name || 'Barbeiro'}
                         </div>
                       </div>
-                    ))
-                  )}
-                </TabsContent>
-                
-                <TabsContent value="confirmed" className="space-y-3">
-                  {confirmedAppointments.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p>Nenhum agendamento confirmado para esta data.</p>
+                      <Button variant="outline" size="sm">Detalhes</Button>
                     </div>
-                  ) : (
-                    confirmedAppointments.map((appointment) => (
-                      <div 
-                        key={appointment.id}
-                        className="p-3 border rounded-md bg-green-50 border-green-200 flex items-center justify-between"
-                      >
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-full bg-barber flex items-center justify-center text-white">
-                            {appointment.clientName.split(' ').map(name => name[0]).join('')}
-                          </div>
-                          <div className="ml-3">
-                            <div className="font-medium">{appointment.clientName}</div>
-                            <div className="text-sm text-muted-foreground">{appointment.service}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="text-right mr-4">
-                            <div className="flex items-center">
-                              <Clock size={14} className="mr-1" />
-                              <span>{appointment.time}</span>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {appointment.barber}
-                            </div>
-                          </div>
-                          <Button variant="outline" size="sm">Detalhes</Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </TabsContent>
-                
-                <TabsContent value="pending" className="space-y-3">
-                  {pendingAppointments.length === 0 ? (
-                    <div className="text-center py-8">
-                      <p>Nenhum agendamento pendente para esta data.</p>
-                    </div>
-                  ) : (
-                    pendingAppointments.map((appointment) => (
-                      <div 
-                        key={appointment.id}
-                        className="p-3 border rounded-md bg-amber-50 border-amber-200 flex items-center justify-between"
-                      >
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-full bg-barber flex items-center justify-center text-white">
-                            {appointment.clientName.split(' ').map(name => name[0]).join('')}
-                          </div>
-                          <div className="ml-3">
-                            <div className="font-medium">{appointment.clientName}</div>
-                            <div className="text-sm text-muted-foreground">{appointment.service}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center">
-                          <div className="text-right mr-4">
-                            <div className="flex items-center">
-                              <Clock size={14} className="mr-1" />
-                              <span>{appointment.time}</span>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {appointment.barber}
-                            </div>
-                          </div>
-                          <div className="space-x-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="border-green-500 text-green-500 hover:bg-green-50"
-                              onClick={() => handleConfirmAppointment(appointment.id)}
-                            >
-                              Confirmar
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="border-red-500 text-red-500 hover:bg-red-50"
-                              onClick={() => handleCancelAppointment(appointment.id)}
-                            >
-                              Cancelar
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </TabsContent>
-              </Tabs>
+                  </div>
+                ))
+                )
+              )}
             </CardContent>
           </Card>
-          
+
           <Card className="barber-card">
             <CardHeader className="pb-3">
               <CardTitle>Calendário</CardTitle>

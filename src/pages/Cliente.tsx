@@ -30,7 +30,7 @@ export default function Cliente() {
         setLoading(false);
         return;
       }
-      const [{ data: client, error: clientError }, { data: profile, error: profileError }] = await Promise.all([
+      const [{ data: client }, { data: profile }] = await Promise.all([
         supabase.from("clients").select("*").eq("user_id", user.id).single(),
         supabase.from("profiles").select("user_name").eq("id", user.id).single(),
       ]);

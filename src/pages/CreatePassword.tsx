@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,40 +7,41 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 
 export default function CreatePassword() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [hasRecoverySession, setHasRecoverySession] = useState(false);
 
-  const token = searchParams.get("token");
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+      setHasRecoverySession(!!data.session);
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setHasRecoverySession(!!session);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   async function handleCreatePassword(e: React.FormEvent) {
     e.preventDefault();
-    if (!password || !token) return;
+    if (!password) return;
     setLoading(true);
 
-    // Atualiza a senha do usuário convidado
-    const { error } = await supabase.auth.admin.updateUserById(token, { password });
+    // This requires that the user arrived via the password recovery link (session present)
+    const { error } = await supabase.auth.updateUser({ password });
     if (error) {
-      toast({
-        title: "Erro ao criar senha",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao criar senha", description: error.message, variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    // Atualiza status do cliente na tabela clients
-    await (supabase as any).from("clients").update({ status: "active" }).eq("user_id", token);
-
-    toast({
-      title: "Senha criada com sucesso",
-      description: "Você já pode acessar a plataforma!",
-    });
+    toast({ title: "Senha criada com sucesso", description: "Você já pode acessar a plataforma!" });
     setLoading(false);
-    navigate("/dashboard");
+    navigate("/login");
   }
 
   return (
@@ -50,6 +51,11 @@ export default function CreatePassword() {
           <CardTitle>Criar Senha</CardTitle>
         </CardHeader>
         <CardContent>
+          {!hasRecoverySession && (
+            <div className="text-sm text-muted-foreground mb-4">
+              Abra este link a partir do e-mail de recuperação enviado para você.
+            </div>
+          )}
           <form onSubmit={handleCreatePassword} className="space-y-4">
             <Input
               type="password"
@@ -59,7 +65,7 @@ export default function CreatePassword() {
               required
               minLength={8}
             />
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || !hasRecoverySession}>
               {loading ? "Salvando..." : "Criar Senha"}
             </Button>
           </form>
