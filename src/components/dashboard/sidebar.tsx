@@ -23,24 +23,14 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 const navItems = [
   {
-    title: "Dashboard",
-    icon: <BarChart2 className="h-5 w-5" />,
-    href: "/proprietario",
-  },
-  {
     title: "Agendamentos",
     icon: <Calendar className="h-5 w-5" />,
     href: "/agendamentos",
   },
   {
-    title: "Clientes",
-    icon: <Users className="h-5 w-5" />,
-    href: "/clientes",
-  },
-  {
-    title: "Produtos",
+    title: "Meu Estabelecimento",
     icon: <Package className="h-5 w-5" />,
-    href: "/produtos",
+    href: "/Meuestabelecimento",
   },
   {
     title: "Financeiro",

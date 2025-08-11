@@ -204,7 +204,7 @@ export function ServiceDateTimeStep({ date, setDate, selectedTime, setSelectedTi
                 </Button>
               ))
             ) : (
-              <span className="col-span-3 text-muted-foreground">Sem horários disponíveis</span>
+              <span className="col-span-3 text-muted-foreground">Fechado</span>
             )}
           </div>
         </div>

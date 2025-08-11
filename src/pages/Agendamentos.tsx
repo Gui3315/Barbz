@@ -17,20 +17,14 @@ import { supabase } from "@/lib/supabaseClient";
 // Types for appointments, barbers, and services
 interface Appointment {
   id: string;
-  user_id: string;
-  client_id: string;
-  barber_id: string;
-  service_id: string;
-  status: "confirmed" | "pending";
-  total_price?: string;
-  created_at: string;
-  updated_at: string;
-  barbershop_id?: string;
-  start_at: string; // timestamp
-  end_at?: string;
-  service?: Service;
-  barber?: Barber;
-  client?: Client;
+  start_at: string;
+  end_at: string;
+  status: string;
+  total_price: number;
+  notes?: string;
+  client: { name: string };
+  service: { name: string };
+  barber: { name: string };
 }
 
 interface Client {
@@ -140,6 +134,7 @@ export default function Agendamentos() {
   }, [selectedDate, selectedBarber, selectedService, services]);
 
   // Buscar dados do Supabase
+
 useEffect(() => {
   const fetchData = async () => {
     setLoading(true);
@@ -152,25 +147,34 @@ useEffect(() => {
     // Buscar clientes
     const { data: clientsData } = await supabase.from('clients').select('id, name');
     setClients(clientsData || []);
-    // Buscar agendamentos apenas do dia selecionado
+
+    // Buscar barbershop_id do usuário logado
+    const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null;
+    let barbershopId = null;
+    if (user) {
+      const { data: barbershop } = await supabase
+        .from('barbershops')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single();
+      if (barbershop) {
+        barbershopId = barbershop.id;
+      }
+    }
+
+    // Buscar agendamentos do dia via função RPC (resolve RLS)
     let appointmentsData = [];
-    if (selectedDate) {
-      // Garantir busca do dia inteiro em UTC
-      const year = selectedDate.getUTCFullYear();
-      const month = String(selectedDate.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(selectedDate.getUTCDate()).padStart(2, '0');
-      const startUTC = `${year}-${month}-${day}T00:00:00+00:00`;
-      // Próximo dia para o filtro <
-      const nextDay = new Date(Date.UTC(year, Number(month) - 1, Number(day) + 1));
-      const nextYear = nextDay.getUTCFullYear();
-      const nextMonth = String(nextDay.getUTCMonth() + 1).padStart(2, '0');
-      const nextDayStr = String(nextDay.getUTCDate()).padStart(2, '0');
-      const endUTC = `${nextYear}-${nextMonth}-${nextDayStr}T00:00:00+00:00`;
-      const { data, error } = await supabase
-        .from('appointments')
-        .select('*')
-        .gte('start_at', startUTC)
-        .lt('start_at', endUTC);
+    if (barbershopId && selectedDate) {
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const day = String(selectedDate.getDate()).padStart(2, '0');
+      const startDate = `${year}-${month}-${day}T00:00:00`;
+      const endDate = `${year}-${month}-${day}T23:59:59`;
+      const { data, error } = await supabase.rpc('get_appointments_with_clients', {
+        p_barbershop_id: barbershopId,
+        p_start_date: startDate,
+        p_end_date: endDate
+      });
       if (error) {
         setAppointments([]);
         setLoading(false);
@@ -178,28 +182,19 @@ useEffect(() => {
       }
       appointmentsData = data || [];
     }
-    // Buscar appointment_services para os appointments do dia
-    const appointmentIds = (appointmentsData || []).map((a: any) => a.id);
-    let appointmentServicesData: any[] = [];
-    if (appointmentIds.length > 0) {
-      const { data: asData } = await supabase
-        .from('appointment_services')
-        .select('appointment_id, service_id')
-        .in('appointment_id', appointmentIds);
-      appointmentServicesData = asData || [];
-    }
-    // Mapeamento manual para preencher nome do cliente, serviço (via appointment_services) e barbeiro
+    // Mapear para o formato esperado pelo componente
     setAppointments(
-      (appointmentsData || []).map((a: any) => {
-        const appService = appointmentServicesData.find((as) => as.appointment_id === a.id);
-        const service = appService ? servicesData?.find((s: any) => s.id === appService.service_id) : null;
-        return {
-          ...a,
-          client: clientsData?.find((c: any) => c.id === a.client_id) || null,
-          service: service || null,
-          barber: barbersData?.find((b: any) => b.id === a.barber_id) || null,
-        };
-      })
+      (appointmentsData || []).map((a: any) => ({
+        id: a.appointment_id,
+        start_at: a.start_at,
+        end_at: a.end_at,
+        status: a.status,
+        total_price: a.total_price,
+        notes: a.notes,
+        client: { name: a.client_name },
+        service: { name: a.service_name },
+        barber: { name: a.barber_name },
+      }))
     );
     setLoading(false);
   };

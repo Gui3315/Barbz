@@ -114,7 +114,7 @@ export default function Login() {
       return;
     }
     if (profileData.user_type === 'proprietario') {
-      navigate('/proprietario');
+      navigate('/agendamentos');
     } else {
       navigate('/cliente');
     }
