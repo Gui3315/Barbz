@@ -73,7 +73,7 @@ export default function Cliente() {
                 <p className="text-slate-600">Bem-vindo à sua área pessoal</p>
               </div>
               <Link
-                to="/landing"
+                to="/"
                 className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 group"
               >
                 <LogOut size={18} className="group-hover:scale-110 transition-transform" />

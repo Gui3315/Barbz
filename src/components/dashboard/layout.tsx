@@ -32,7 +32,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/landing");
+    navigate("/");
   };
 
       return (

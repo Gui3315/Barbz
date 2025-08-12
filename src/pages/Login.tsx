@@ -886,7 +886,7 @@ export default function Login() {
           variant="ghost"
           className="text-white/70 hover:text-white hover:bg-white/10 backdrop-blur-sm border border-white/20 hover:border-white/30 font-medium px-6 py-2 rounded-lg transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/20"
         >
-          <Link to="/landing">Voltar para início</Link>
+          <Link to="/">Voltar para início</Link>
         </Button>
       </div>
     </div>
