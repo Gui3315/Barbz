@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { supabase } from "@/lib/supabaseClient"
 import { Link } from "react-router-dom"
 import { ClientLayout } from "@/components/client/layout"
@@ -9,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar, User, LogOut, Camera, Save } from "lucide-react"
 
 export default function Cliente() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("agendamento")
   const [clientData, setClientData] = useState<any>(null)
   const [profileData, setProfileData] = useState<any>(null)
@@ -19,16 +21,18 @@ export default function Cliente() {
   const [clientPhone, setClientPhone] = useState("")
 
   useEffect(() => {
+    let isMounted = true;
     async function fetchClientAndProfile() {
-      setLoading(true)
+      setLoading(true);
       const {
         data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        setClientData(null)
-        setProfileData(null)
-        setLoading(false)
-        return
+        error: userError
+      } = await supabase.auth.getUser();
+      if (!user || userError) {
+        // Sessão inválida ou expirada: forçar logout e redirecionar
+        await supabase.auth.signOut();
+        if (isMounted) navigate("/login", { replace: true });
+        return;
       }
       // Buscar todos os dados relevantes do perfil do cliente
       const [{ data: client, error: clientError }, { data: profile, error: profileError }] = await Promise.all([
@@ -38,20 +42,23 @@ export default function Cliente() {
           .select("id, user_name, email, phone, profile_photo_url")
           .match({ id: user.id, user_type: "cliente" })
           .single(),
-      ])
-      console.log("[CLIENTE] user:", user)
-      console.log("[CLIENTE] client:", client, clientError)
-      console.log("[CLIENTE] profile:", profile, profileError)
-      setClientData(client || null)
-      setProfileData(profile || null)
+      ]);
+      if (clientError?.message === "JWT expired" || profileError?.message === "JWT expired") {
+        await supabase.auth.signOut();
+        if (isMounted) navigate("/login", { replace: true });
+        return;
+      }
+      setClientData(client || null);
+      setProfileData(profile || null);
       // Preencher campos editáveis
-      setClientName(profile?.user_name || "")
-      setClientEmail(profile?.email || "")
-      setClientPhone(profile?.phone || "")
-      setLoading(false)
+      setClientName(profile?.user_name || "");
+      setClientEmail(profile?.email || "");
+      setClientPhone(profile?.phone || "");
+      setLoading(false);
     }
-    fetchClientAndProfile()
-  }, [])
+    fetchClientAndProfile();
+    return () => { isMounted = false; };
+  }, [navigate]);
 
   return (
     <ClientLayout>
