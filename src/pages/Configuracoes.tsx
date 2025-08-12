@@ -122,12 +122,12 @@ export default function Configuracoes() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-amber-50/20">
         <div className="space-y-6 p-6">
           <div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-lg p-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 via-blue-600 to-slate-700 bg-clip-text text-transparent">
                 Configurações
               </h1>
               <Button
-                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-300 gap-2"
+                className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-300 gap-2"
                 onClick={handleSaveSettings}
                 disabled={loading}
               >

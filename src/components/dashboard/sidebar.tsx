@@ -73,7 +73,7 @@ export function Sidebar() {
 
   return (
     <>
-      {isMobile && (
+      {isMobile && !isOpen && (
         <Button
           variant="ghost"
           size="icon"

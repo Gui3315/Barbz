@@ -21,15 +21,21 @@ export default function Landing() {
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/60 py-4 px-6 sticky top-0 z-50">
-        <div className="container max-w-7xl mx-auto flex justify-between items-center">
-          <Logo className="h-10" />
-          <div className="flex gap-3">
-            <Button variant="ghost" className="text-slate-600 hover:text-slate-900" asChild>
+      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200/60 py-2 px-0 sticky top-0 z-50 w-full">
+        <div className="w-full flex flex-row items-center gap-1 sm:gap-2 pl-5 md:pl-8 lg:pl-12">
+          <Logo className="h-8 sm:h-10 mr-1" />
+          <div className="flex gap-1 sm:gap-2 flex-shrink-0 ml-auto mr-2 md:ml-0 md:mr-4 lg:mr-8 w-auto"
+            style={{marginLeft: 'auto'}}
+          >
+            <Button 
+              variant="ghost" 
+              className="text-slate-600 hover:text-slate-900 px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-base min-w-0"
+              asChild
+            >
               <Link to="/login">Área do Cliente</Link>
             </Button>
             <Button
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/25"
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/25 px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-base min-w-0"
               asChild
             >
               <Link to="/login">Área do Proprietário</Link>

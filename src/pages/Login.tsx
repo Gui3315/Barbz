@@ -1,14 +1,16 @@
 "use client"
 
-import type React from "react"
+import React from "react"
 
 import { useState } from "react"
+import { useAuth } from "@/contexts/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Logo } from "@/components/ui/logo"
 import { useNavigate } from "react-router-dom"
+import { Link } from "react-router-dom"
 
 // Máscara de telefone (XX) XXXXX-XXXX
 function formatPhone(value: string) {
@@ -40,6 +42,11 @@ function getErrorMessage(cnpjInfo: any) {
 
 export default function Login() {
   const navigate = useNavigate()
+  // Hook deve ser chamado no topo do componente
+  const auth = useAuth()
+  const login = auth.login
+  const user = auth.user
+  const authLoading = auth.loading
   const [phone, setPhone] = useState("")
   const [businessName, setBusinessName] = useState("")
   const [address, setAddress] = useState("")
@@ -87,7 +94,9 @@ export default function Login() {
     setError(null)
     setSuccess(null)
     const emailNorm = email.trim().toLowerCase()
+    console.log('Tentando login', { emailNorm, password })
     const { data, error } = await supabase.auth.signInWithPassword({ email: emailNorm, password })
+    console.log('Resultado signInWithPassword', { data, error })
     if (error) {
       setError(error.message)
       setLoading(false)
@@ -106,17 +115,20 @@ export default function Login() {
       .select("user_type")
       .eq("id", user.id)
       .single()
+    console.log('Resultado busca profile', { profileData, profileError })
     if (profileError || !profileData) {
       setError("Não foi possível obter o tipo de usuário.")
       setLoading(false)
       return
     }
-    if (profileData.user_type === "proprietario") {
-      navigate("/agendamentos")
-    } else {
-      navigate("/cliente")
-    }
+    // Delay mínimo para aguardar AuthContext atualizar
+    console.log('Aguardando contexto atualizar...')
+    await new Promise(resolve => setTimeout(resolve, 100))
+    const targetRoute = profileData.user_type === "proprietario" ? "/agendamentos" : "/cliente"
+    console.log('Navegando para:', targetRoute)
+    navigate(targetRoute)
     setLoading(false)
+  // (Removido: redirecionamento automático via useEffect)
   }
 
   // Validação de CNPJ via BrasilAPI
@@ -874,7 +886,7 @@ export default function Login() {
           variant="ghost"
           className="text-white/70 hover:text-white hover:bg-white/10 backdrop-blur-sm border border-white/20 hover:border-white/30 font-medium px-6 py-2 rounded-lg transition-all duration-300 hover:shadow-lg hover:shadow-blue-500/20"
         >
-          <a href="/landing">Voltar para início</a>
+          <Link to="/landing">Voltar para início</Link>
         </Button>
       </div>
     </div>

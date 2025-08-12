@@ -219,7 +219,7 @@ export function ServiceDateTimeStep({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-4">
           <h4 className="font-medium text-slate-700 flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-blue-600" />
+            <CalendarIcon className="h-5 w-5 text-blue-600" />
             Selecione a data
           </h4>
           <div className="backdrop-blur-sm bg-white/80 border border-slate-200 rounded-xl p-4 shadow-sm">
@@ -341,17 +341,17 @@ export function ConfirmStep({
           </div>
         </div>
       </div>
-      <div className="flex justify-between pt-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between pt-4">
         <Button
           variant="outline"
           onClick={handleBack}
-          className="px-6 py-2 border-slate-300 hover:bg-slate-50 bg-transparent"
+          className="px-6 py-2 border-slate-300 hover:bg-slate-50 bg-transparent w-full sm:w-auto"
         >
           Voltar
         </Button>
         <Button
           onClick={handleConfirm}
-          className="px-8 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
+          className="px-8 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200 w-full sm:w-auto"
         >
           Confirmar agendamento
         </Button>
@@ -363,7 +363,7 @@ export function ConfirmStep({
 // COMPONENTE PRINCIPAL
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import { CalendarIcon, User } from "lucide-react"
+import { Calendar as CalendarIcon, User } from "lucide-react"
 
 type ClientBookingProps = {
   onBookingComplete?: () => void
@@ -747,7 +747,7 @@ export default function ClientBooking({ onBookingComplete }: ClientBookingProps)
             defaultValue={bookingMethod}
             onValueChange={(value) => setBookingMethod(value as "time" | "professional")}
           >
-            <TabsList className="grid w-full grid-cols-2 mb-4 mt-6 bg-slate-100/80 p-1 rounded-lg">
+          <TabsList className="grid w-full grid-cols-1 md:grid-cols-2 mb-8 mt-6 bg-slate-100/80 p-1 rounded-lg gap-2 md:gap-0">
               <TabsTrigger
                 value="time"
                 className="flex items-center gap-2 data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200"

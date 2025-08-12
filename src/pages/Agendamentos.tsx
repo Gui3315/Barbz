@@ -6,6 +6,13 @@ import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { CalendarIcon, Clock, Plus } from "lucide-react"
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue
+} from "@/components/ui/select"
 import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -371,20 +378,21 @@ export default function Agendamentos() {
                 <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-800 via-blue-600 to-slate-700 bg-clip-text text-transparent">
                   Agendamentos
                 </h1>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 w-full max-w-xs">
                   <label className="text-sm font-medium text-slate-600">Barbeiro:</label>
-                  <select
-                    className="px-3 py-2 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-                    value={barberFilter}
-                    onChange={(e) => setBarberFilter(e.target.value)}
-                  >
-                    <option value="all">Todos</option>
-                    {barbers.map((barber) => (
-                      <option key={barber.id} value={barber.id}>
-                        {barber.name}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={barberFilter} onValueChange={setBarberFilter}>
+                    <SelectTrigger className="w-full px-3 py-2 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="w-full max-w-xs">
+                      <SelectItem value="all">Todos</SelectItem>
+                      {barbers.map((barber) => (
+                        <SelectItem key={barber.id} value={barber.id}>
+                          {barber.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

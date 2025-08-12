@@ -362,7 +362,7 @@ export default function MeuEstabelecimento() {
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-amber-50/20">
           <div className="space-y-8 p-6">
             <div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-xl p-6">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-800 via-blue-600 to-amber-600 bg-clip-text text-transparent">
+              <h1 className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-slate-800 via-blue-600 to-amber-600 bg-clip-text text-transparent break-words text-balance leading-tight max-w-[320px] sm:max-w-none">
                 Meu Estabelecimento
               </h1>
               <p className="text-slate-600 mt-2">Gerencie barbeiros, serviços e horários de funcionamento</p>
@@ -484,17 +484,21 @@ export default function MeuEstabelecimento() {
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex flex-row items-center gap-4 w-full">
+                              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0">
                                 {barber.name.charAt(0).toUpperCase()}
                               </div>
-                              <div>
-                                <h3 className="font-semibold text-slate-800">{barber.name}</h3>
-                                {barber.phone && <p className="text-sm text-slate-600">{barber.phone}</p>}
+                              <div className="flex flex-col w-full min-w-0">
+                                <h3 className="font-semibold text-slate-800 text-base break-words leading-tight w-full min-w-0">
+                                  {barber.name}
+                                </h3>
+                                {barber.phone && (
+                                  <p className="text-sm text-slate-600 break-all w-full min-w-0">{barber.phone}</p>
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-row items-center gap-2 mt-2 sm:mt-0">
                               <span
                                 className={`px-3 py-1 rounded-full text-xs font-semibold ${
                                   barber.is_active
