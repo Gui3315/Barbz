@@ -107,46 +107,19 @@ export default function Login() {
 
   // Login
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
-    const emailNorm = email.trim().toLowerCase()
-    console.log('Tentando login', { emailNorm, password })
-    const { data, error } = await supabase.auth.signInWithPassword({ email: emailNorm, password })
-    console.log('Resultado signInWithPassword', { data, error })
-    if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    const emailNorm = email.trim().toLowerCase();
+    try {
+      await login(emailNorm, password);
+      // O redirecionamento será feito pelo useEffect
+    } catch (err: any) {
+      setError(err?.message || "Erro inesperado ao tentar login.");
+    } finally {
+      setLoading(false);
     }
-    // Buscar dados do usuário logado
-    const user = data?.user
-    if (!user) {
-      setError("Usuário não encontrado.")
-      setLoading(false)
-      return
-    }
-    // Buscar perfil do usuário para pegar o campo type
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select("user_type")
-      .eq("id", user.id)
-      .single()
-    console.log('Resultado busca profile', { profileData, profileError })
-    if (profileError || !profileData) {
-      setError("Não foi possível obter o tipo de usuário.")
-      setLoading(false)
-      return
-    }
-    // Delay mínimo para aguardar AuthContext atualizar
-    console.log('Aguardando contexto atualizar...')
-    await new Promise(resolve => setTimeout(resolve, 100))
-    const targetRoute = profileData.user_type === "proprietario" ? "/agendamentos" : "/cliente"
-    console.log('Navegando para:', targetRoute)
-    navigate(targetRoute)
-    setLoading(false)
-  // (Removido: redirecionamento automático via useEffect)
   }
 
   // Validação de CNPJ via BrasilAPI

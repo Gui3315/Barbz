@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/contexts/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Link } from "react-router-dom"
 import { ClientLayout } from "@/components/client/layout"
@@ -11,6 +12,7 @@ import { Calendar, User, LogOut, Camera, Save } from "lucide-react"
 
 export default function Cliente() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState("agendamento")
   const [clientData, setClientData] = useState<any>(null)
   const [profileData, setProfileData] = useState<any>(null)
@@ -79,13 +81,17 @@ export default function Cliente() {
                 </h1>
                 <p className="text-slate-600">Bem-vindo à sua área pessoal</p>
               </div>
-              <Link
-                to="/"
+              <button
+                type="button"
+                onClick={async () => {
+                  await logout();
+                  navigate("/", { replace: true });
+                }}
                 className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200 group"
               >
                 <LogOut size={18} className="group-hover:scale-110 transition-transform" />
                 <span className="font-medium">Sair</span>
-              </Link>
+              </button>
             </div>
           </div>
 
