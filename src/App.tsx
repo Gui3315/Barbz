@@ -9,17 +9,10 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Landing from "./pages/Landing";
 import Agendamentos from "./pages/Agendamentos";
-import Financeiro from "./pages/Financeiro";
-import Mensagens from "./pages/Mensagens";
-import Fidelidade from "./pages/Fidelidade";
 import Configuracoes from "./pages/Configuracoes";
 import Cliente from "./pages/Cliente";
 import Produtos from "./pages/Meuestabelecimento";
-import Comandas from "./pages/Comandas";
-import LogsAtividades from "./pages/LogsAtividades";
-import Funcionamento from "./pages/Funcionamento";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import CreatePassword from "@/pages/CreatePassword";
 
 const queryClient = new QueryClient();
 
@@ -31,15 +24,12 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/create-password" element={<CreatePassword />} />
-            <Route path="/" element={<ProtectedRoute allowed="proprietario"><Agendamentos /></ProtectedRoute>} />
+            <Route path="/" element={<Landing />} />
+            <Route path="/agendamentos" element={<ProtectedRoute allowed="proprietario"><Agendamentos /></ProtectedRoute>} />
             <Route path="/login" element={<Login />} />
             <Route path="/agendamentos" element={<Agendamentos />} />
             <Route path="/Meuestabelecimento" element={<Produtos />} />
-            <Route path="/comandas" element={<Comandas />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
-            <Route path="/logs-atividades" element={<LogsAtividades />} />
-            <Route path="/landing" element={<Landing />} />
             <Route path="/cliente" element={<ProtectedRoute allowed="cliente"><Cliente /></ProtectedRoute>} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
