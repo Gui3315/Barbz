@@ -117,10 +117,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function fetchUser() {
       setLoading(true);
+      console.log('[AuthContext] fetchUser: iniciando');
       const {
         data: { user: supaUser },
       } = await supabase.auth.getUser();
       if (!supaUser) {
+        console.log('[AuthContext] fetchUser: nenhum usuário encontrado, limpando contexto');
         setUser(null);
         setLoading(false);
         return;
@@ -128,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Bootstrap pós login (idempotente, evitar duplicidade)
       if (!bootstrappedRef.current) {
+        console.log('[AuthContext] fetchUser: executando bootstrapAfterLogin');
         await bootstrapAfterLogin(supaUser);
         bootstrappedRef.current = true;
       }
@@ -139,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq("id", supaUser.id)
         .maybeSingle();
       if (!profile) {
+        console.log('[AuthContext] fetchUser: perfil não encontrado, tentando novamente após delay');
         await new Promise((r) => setTimeout(r, 300));
         ({ data: profile } = await supabase
           .from("profiles")
@@ -147,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle());
       }
       if (!profile) {
+        console.log('[AuthContext] fetchUser: perfil ainda não encontrado, limpando contexto');
         setUser(null);
         setLoading(false);
         return;
@@ -154,12 +159,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
       setUser({ id: supaUser.id, email: supaUser.email!, user_type: userType });
       setLoading(false);
+      console.log('[AuthContext] fetchUser: usuário autenticado', { id: supaUser.id, email: supaUser.email, userType });
     }
     fetchUser();
     // Listen to auth changes
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         if (!bootstrappedRef.current) {
+          console.log('[AuthContext] onAuthStateChange: executando bootstrapAfterLogin');
           await bootstrapAfterLogin(session.user);
           bootstrappedRef.current = true;
         }
@@ -172,9 +179,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (profile) {
               const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
               setUser({ id: session.user!.id, email: session.user!.email!, user_type: userType });
+              console.log('[AuthContext] onAuthStateChange: usuário autenticado', { id: session.user!.id, email: session.user!.email, userType });
+            } else {
+              console.log('[AuthContext] onAuthStateChange: perfil não encontrado, limpando contexto');
+              setUser(null);
             }
           });
       } else {
+        console.log('[AuthContext] onAuthStateChange: sessão nula, limpando contexto');
         setUser(null);
         bootstrappedRef.current = false;
       }
