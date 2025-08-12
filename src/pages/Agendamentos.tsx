@@ -313,13 +313,17 @@ useEffect(() => {
     }
   };
 
-  // Filtrar agendamentos por data (usando start_at)
+  // Filtro por barbeiro
+  const [barberFilter, setBarberFilter] = useState<string>('all');
+  // Filtrar agendamentos por data e barbeiro
   const filteredAppointments = appointments.filter(appointment => {
     if (!selectedDate) return true;
     // start_at pode ser string ISO, comparar só a data (yyyy-MM-dd)
     const apptDate = appointment.start_at ? appointment.start_at.slice(0, 10) : '';
     const selected = format(selectedDate, "yyyy-MM-dd");
-    return apptDate === selected;
+    const matchesDate = apptDate === selected;
+    const matchesBarber = barberFilter === 'all' || (appointment.barber && appointment.barber.name && barbers.find(b => b.id === barberFilter && b.name === appointment.barber.name));
+    return matchesDate && matchesBarber;
   });
   const confirmedAppointments = filteredAppointments.filter(a => a.status === "confirmed" || a.status === null);
   const pendingAppointments: Appointment[] = [];
@@ -350,8 +354,23 @@ useEffect(() => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h1 className="header-text">Agendamentos</h1>
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="header-text">Agendamentos</h1>
+            <div>
+              <label className="text-sm font-medium mr-2">Barbeiro:</label>
+              <select
+                className="pl-2 pr-8 py-1 border rounded"
+                value={barberFilter}
+                onChange={e => setBarberFilter(e.target.value)}
+              >
+                <option value="all">Todos</option>
+                {barbers.map(barber => (
+                  <option key={barber.id} value={barber.id}>{barber.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>
               <Button className="btn-primary gap-2">

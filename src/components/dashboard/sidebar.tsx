@@ -1,8 +1,9 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
+import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import {
   Calendar,
@@ -33,41 +34,38 @@ const navItems = [
     href: "/Meuestabelecimento",
   },
   {
-    title: "Financeiro",
-    icon: <DollarSign className="h-5 w-5" />,
-    href: "/financeiro",
-  },
-  {
-    title: "Mensagens",
-    icon: <MessageSquare className="h-5 w-5" />,
-    href: "/mensagens",
-  },
-  {
-    title: "Fidelidade",
-    icon: <Star className="h-5 w-5" />,
-    href: "/fidelidade",
-  },
-  {
-    title: "Funcionamento",
-    icon: <Clock className="h-5 w-5" />,
-    href: "/funcionamento",
-  },
-  {
     title: "Configurações",
     icon: <Settings className="h-5 w-5" />,
     href: "/configuracoes",
   },
-  {
-    title: "Logs de Atividades",
-    icon: <FileText className="h-5 w-5" />,
-    href: "/logs-atividades",
-  },
 ];
 
 export function Sidebar() {
+
   const location = useLocation();
   const isMobile = useIsMobile();
   const [isOpen, setIsOpen] = useState(false);
+  const [userName, setUserName] = useState<string>("");
+  const [userRole, setUserRole] = useState<string>("");
+  const [logoUrl, setLogoUrl] = useState<string>("");
+
+  useEffect(() => {
+    async function fetchProfile() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("user_name, user_type, logo_url")
+        .eq("id", user.id)
+        .single();
+      if (profile) {
+        setUserName(profile.user_name || "Usuário");
+        setUserRole(profile.user_type || "");
+        setLogoUrl(profile.logo_url || "");
+      }
+    }
+    fetchProfile();
+  }, []);
 
   const toggleSidebar = () => {
     setIsOpen(!isOpen);
@@ -122,19 +120,24 @@ export function Sidebar() {
             ))}
           </nav>
         </div>
-        <div className="p-4 border-t border-border flex justify-between items-center">
+        <div className="p-4 border-t border-border flex items-center">
           <div className="flex items-center">
-            <div className="w-8 h-8 rounded-full bg-barber-light flex items-center justify-center text-white">
-              JD
-            </div>
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt="Logo do usuário"
+                className="w-8 h-8 rounded-full object-cover bg-barber-light"
+              />
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-barber-light flex items-center justify-center text-white">
+                {userName ? userName.split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase() : "U"}
+              </div>
+            )}
             <div className="ml-2">
-              <p className="text-sm font-medium">João Barber</p>
-              <p className="text-xs text-muted-foreground">Proprietário</p>
+              <p className="text-sm font-medium">{userName || "Usuário"}</p>
+              <p className="text-xs text-muted-foreground">{userRole && userRole.toLowerCase() === "proprietario" ? "Proprietário" : userRole}</p>
             </div>
           </div>
-          <Button variant="ghost" size="icon">
-            <Bell className="h-5 w-5" />
-          </Button>
         </div>
       </div>
       {isMobile && isOpen && (

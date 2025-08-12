@@ -35,12 +35,8 @@ const App = () => (
             <Route path="/" element={<ProtectedRoute allowed="proprietario"><Agendamentos /></ProtectedRoute>} />
             <Route path="/login" element={<Login />} />
             <Route path="/agendamentos" element={<Agendamentos />} />
-            <Route path="/financeiro" element={<Financeiro />} />
             <Route path="/Meuestabelecimento" element={<Produtos />} />
             <Route path="/comandas" element={<Comandas />} />
-            <Route path="/mensagens" element={<Mensagens />} />
-            <Route path="/fidelidade" element={<Fidelidade />} />
-            <Route path="/funcionamento" element={<ProtectedRoute allowed="proprietario"><Funcionamento /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="/logs-atividades" element={<LogsAtividades />} />
             <Route path="/landing" element={<Landing />} />
