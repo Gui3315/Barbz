@@ -10,32 +10,34 @@ import { Logo } from "@/components/ui/logo"
 import { useNavigate } from "react-router-dom"
 import { Link } from "react-router-dom"
 
-// Máscara de telefone (XX) XXXXX-XXXX
-function formatPhone(value: string) {
-  const digits = value.replace(/\D/g, "")
-  let formatted = ""
-  if (digits.length > 0) formatted += "(" + digits.substring(0, 2)
-  if (digits.length > 2) formatted += ") " + digits.substring(2, 7)
-  if (digits.length > 7) formatted += "-" + digits.substring(7, 11)
-  return formatted
-// Função auxiliar para determinar a mensagem de erro do CNPJ
-function getErrorMessage(cnpjInfo: any) {
-  if (cnpjInfo.descricao_situacao_cadastral !== "ATIVA") {
-    return `CNPJ inativo (Situação: ${cnpjInfo.descricao_situacao_cadastral})`
+
+export default function login() {
+  // Máscara de telefone (XX) XXXXX-XXXX
+  function formatPhone(value: string) {
+    const digits = value.replace(/\D/g, "")
+    let formatted = ""
+    if (digits.length > 0) formatted += "(" + digits.substring(0, 2)
+    if (digits.length > 2) formatted += ") " + digits.substring(2, 7)
+    if (digits.length > 7) formatted += "-" + digits.substring(7, 11)
+    return formatted
+  // Função auxiliar para determinar a mensagem de erro do CNPJ
+  function getErrorMessage(cnpjInfo: any) {
+    if (cnpjInfo.descricao_situacao_cadastral !== "ATIVA") {
+      return `CNPJ inativo (Situação: ${cnpjInfo.descricao_situacao_cadastral})`
+    }
+    const cnaesValidos = ["9602501", "9602-5/01", 96025, 9602501]
+    const cnaeString = String(cnpjInfo.cnae_fiscal)
+    const cnaeDescricao = String(cnpjInfo.cnae_fiscal_descricao || "").toLowerCase()
+    const cnaeValido = cnaesValidos.some(
+      (cnae) => cnaeString === String(cnae) || cnaeString.replace(/[^0-9]/g, "") === String(cnae).replace(/[^0-9]/g, ""),
+    )
+    const palavrasChave = ["cabeleireiro", "manicure", "pedicure", "salão", "beleza", "estética"]
+    const descricaoValida = palavrasChave.some((palavra) => cnaeDescricao.includes(palavra))
+    if (!cnaeValido && !descricaoValida) {
+      return `CNPJ não é da área de beleza. CNAE: ${cnpjInfo.cnae_fiscal} - ${cnpjInfo.cnae_fiscal_descricao}`
+    }
+    return "CNPJ inválido"
   }
-  const cnaesValidos = ["9602501", "9602-5/01", 96025, 9602501]
-  const cnaeString = String(cnpjInfo.cnae_fiscal)
-  const cnaeDescricao = String(cnpjInfo.cnae_fiscal_descricao || "").toLowerCase()
-  const cnaeValido = cnaesValidos.some(
-    (cnae) => cnaeString === String(cnae) || cnaeString.replace(/[^0-9]/g, "") === String(cnae).replace(/[^0-9]/g, ""),
-  )
-  const palavrasChave = ["cabeleireiro", "manicure", "pedicure", "salão", "beleza", "estética"]
-  const descricaoValida = palavrasChave.some((palavra) => cnaeDescricao.includes(palavra))
-  if (!cnaeValido && !descricaoValida) {
-    return `CNPJ não é da área de beleza. CNAE: ${cnpjInfo.cnae_fiscal} - ${cnpjInfo.cnae_fiscal_descricao}`
-  }
-  return "CNPJ inválido"
-}
 
   const navigate = useNavigate();
   const auth = useAuth();
@@ -913,4 +915,5 @@ function getErrorMessage(cnpjInfo: any) {
       </div>
     </div>
   )
+}
 }
