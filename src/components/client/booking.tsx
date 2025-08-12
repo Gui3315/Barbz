@@ -637,10 +637,15 @@ export default function ClientBooking({ onBookingComplete }: ClientBookingProps)
   const handleConfirmHorario = async () => {
     if (!selectedShopId || !selectedServiceHorario || !dateHorario || !selectedTimeHorario || !selectedBarberHorario)
       return
+    const user = (await supabase.auth.getUser()).data.user;
+    if (!user) {
+      toast({ title: "Erro ao agendar", description: "Usuário não autenticado.", variant: "destructive" })
+      return
+    }
     const startISO = getLocalOffsetTimestamp(dateHorario, selectedTimeHorario)
     const { data, error } = await (supabase as any).rpc("create_appointment", {
       p_barbershop_id: selectedShopId,
-      p_client_id: null,
+      p_client_id: user.id,
       p_barber_id: selectedBarberHorario,
       p_start_at: startISO,
       p_service_ids: [selectedServiceHorario],
@@ -683,10 +688,15 @@ export default function ClientBooking({ onBookingComplete }: ClientBookingProps)
       !selectedBarberProfissional
     )
       return
+    const user = (await supabase.auth.getUser()).data.user;
+    if (!user) {
+      toast({ title: "Erro ao agendar", description: "Usuário não autenticado.", variant: "destructive" })
+      return
+    }
     const startISO = getLocalOffsetTimestamp(dateProfissional, selectedTimeProfissional)
     const { data, error } = await (supabase as any).rpc("create_appointment", {
       p_barbershop_id: selectedShopId,
-      p_client_id: null,
+      p_client_id: user.id,
       p_barber_id: selectedBarberProfissional,
       p_start_at: startISO,
       p_service_ids: [selectedServiceProfissional],
