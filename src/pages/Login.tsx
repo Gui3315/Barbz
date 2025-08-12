@@ -1,8 +1,6 @@
 "use client"
 
-import React from "react"
-
-import { useState } from "react"
+import React, { useEffect, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
@@ -20,7 +18,6 @@ function formatPhone(value: string) {
   if (digits.length > 2) formatted += ") " + digits.substring(2, 7)
   if (digits.length > 7) formatted += "-" + digits.substring(7, 11)
   return formatted
-}
 // Função auxiliar para determinar a mensagem de erro do CNPJ
 function getErrorMessage(cnpjInfo: any) {
   if (cnpjInfo.descricao_situacao_cadastral !== "ATIVA") {
@@ -40,13 +37,31 @@ function getErrorMessage(cnpjInfo: any) {
   return "CNPJ inválido"
 }
 
-export default function Login() {
-  const navigate = useNavigate()
-  // Hook deve ser chamado no topo do componente
-  const auth = useAuth()
-  const login = auth.login
-  const user = auth.user
-  const authLoading = auth.loading
+  const navigate = useNavigate();
+  const auth = useAuth();
+  const login = auth.login;
+  const user = auth.user;
+  const authLoading = auth.loading;
+
+  // Redireciona automaticamente se já estiver autenticado ou após login
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        supabase
+          .from("profiles")
+          .select("user_type")
+          .eq("id", session.user.id)
+          .single()
+          .then(({ data: profileData }) => {
+            const targetRoute = profileData?.user_type === "proprietario" ? "/agendamentos" : "/cliente";
+            navigate(targetRoute);
+          });
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [navigate]);
   const [phone, setPhone] = useState("")
   const [businessName, setBusinessName] = useState("")
   const [address, setAddress] = useState("")
@@ -510,7 +525,14 @@ export default function Login() {
                   type="text"
                   placeholder="(XX) XXXXX-XXXX"
                   value={phone}
-                  onChange={(e) => setPhone(formatPhone(e.target.value))}
+                  onChange={e => setPhone(((val: string) => {
+                    const digits = val.replace(/\D/g, "");
+                    let formatted = "";
+                    if (digits.length > 0) formatted += "(" + digits.substring(0, 2);
+                    if (digits.length > 2) formatted += ") " + digits.substring(2, 7);
+                    if (digits.length > 7) formatted += "-" + digits.substring(7, 11);
+                    return formatted;
+                  })(e.target.value))}
                   maxLength={15}
                   required
                   className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500/20 rounded-lg"
