@@ -21,6 +21,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const bootstrappedRef = useRef(false);
 
+  // Força logout e limpa storage do Supabase
+  const forceLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    bootstrappedRef.current = false;
+    try {
+      localStorage.removeItem('supabase.auth.token');
+      localStorage.removeItem('sb-' + import.meta.env.VITE_SUPABASE_ANON_KEY + '-auth-token');
+      sessionStorage.removeItem('supabase.auth.token');
+    } catch {}
+  };
+
   // Bootstrap pós-login: ajusta perfil e cria recursos iniciais conforme metadata do usuário
   const bootstrapAfterLogin = async (supaUser: { id: string; email?: string | null; user_metadata?: any }) => {
     if (!supaUser) return;
@@ -79,6 +91,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await supabase.from("salon_schedule").insert(rows);
           }
 
+          // Adiciona o proprietário como barbeiro na tabela barbers se ainda não existir
+          const { data: existingBarber, error: barberErr } = await supabase
+            .from("barbers")
+            .select("id")
+            .eq("user_id", supaUser.id)
+            .eq("barbershop_id", shopId)
+            .maybeSingle();
+          if (!existingBarber && !barberErr) {
+            await supabase.from("barbers").insert({
+              user_id: supaUser.id,
+              name: md.user_name || null,
+              phone: md.phone || null,
+              is_active: true,
+              barbershop_id: shopId,
+            });
+          }
+
           // Seed buffer setting se ausente
           const { data: bufAny, error: bufErr } = await sb
             .from("business_settings")
@@ -117,20 +146,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function fetchUser() {
       setLoading(true);
-      console.log('[AuthContext] fetchUser: iniciando');
-      const {
-        data: { user: supaUser },
-      } = await supabase.auth.getUser();
-      if (!supaUser) {
-        console.log('[AuthContext] fetchUser: nenhum usuário encontrado, limpando contexto');
-        setUser(null);
+      const { data, error } = await supabase.auth.getUser();
+      const supaUser = data?.user;
+      if (error || !supaUser) {
+        await forceLogout();
         setLoading(false);
         return;
       }
 
       // Bootstrap pós login (idempotente, evitar duplicidade)
       if (!bootstrappedRef.current) {
-        console.log('[AuthContext] fetchUser: executando bootstrapAfterLogin');
         await bootstrapAfterLogin(supaUser);
         bootstrappedRef.current = true;
       }
@@ -142,7 +167,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq("id", supaUser.id)
         .maybeSingle();
       if (!profile) {
-        console.log('[AuthContext] fetchUser: perfil não encontrado, tentando novamente após delay');
         await new Promise((r) => setTimeout(r, 300));
         ({ data: profile } = await supabase
           .from("profiles")
@@ -151,7 +175,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle());
       }
       if (!profile) {
-        console.log('[AuthContext] fetchUser: perfil ainda não encontrado, limpando contexto');
         setUser(null);
         setLoading(false);
         return;
@@ -159,14 +182,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
       setUser({ id: supaUser.id, email: supaUser.email!, user_type: userType });
       setLoading(false);
-      console.log('[AuthContext] fetchUser: usuário autenticado', { id: supaUser.id, email: supaUser.email, userType });
     }
     fetchUser();
     // Listen to auth changes
     const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         if (!bootstrappedRef.current) {
-          console.log('[AuthContext] onAuthStateChange: executando bootstrapAfterLogin');
           await bootstrapAfterLogin(session.user);
           bootstrappedRef.current = true;
         }
@@ -175,18 +196,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select("user_type")
           .eq("id", session.user.id)
           .maybeSingle()
-          .then(({ data: profile }) => {
+          .then(async ({ data: profile, error }) => {
+            if (error) {
+              await forceLogout();
+              return;
+            }
             if (profile) {
               const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
               setUser({ id: session.user!.id, email: session.user!.email!, user_type: userType });
-              console.log('[AuthContext] onAuthStateChange: usuário autenticado', { id: session.user!.id, email: session.user!.email, userType });
             } else {
-              console.log('[AuthContext] onAuthStateChange: perfil não encontrado, limpando contexto');
               setUser(null);
             }
           });
       } else {
-        console.log('[AuthContext] onAuthStateChange: sessão nula, limpando contexto');
         setUser(null);
         bootstrappedRef.current = false;
       }
