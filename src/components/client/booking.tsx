@@ -1,4 +1,5 @@
-"use client"
+
+
 
 import { useEffect, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabaseClient"
@@ -9,6 +10,12 @@ import { Separator } from "@/components/ui/separator"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckCircle, Clock } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+
+// Verifica se um horário (HH:mm) está dentro do intervalo de almoço (start, end)
+function isInLunchBreak(time: string, lunchStart?: string | null, lunchEnd?: string | null) {
+  if (!lunchStart || !lunchEnd) return false;
+  return time >= lunchStart.slice(0,5) && time < lunchEnd.slice(0,5);
+}
 
 // Helpers de horário
 const SLOT_GRID_MINUTES = 30 // grade visual fixa de 30 min
@@ -371,7 +378,10 @@ type ClientBookingProps = {
 
 import type { Database } from "@/lib/supabaseTypes"
 
-type Barber = Database["public"]["Tables"]["barbers"]["Row"]
+type Barber = Database["public"]["Tables"]["barbers"]["Row"] & {
+  lunch_start?: string | null;
+  lunch_end?: string | null;
+}
 type Service = Database["public"]["Tables"]["services"]["Row"]
 type Barbershop = Database["public"]["Tables"]["barbershops"]["Row"]
 
@@ -524,7 +534,13 @@ export default function ClientBooking({ onBookingComplete }: ClientBookingProps)
 
       if (!error && Array.isArray(data)) {
         data.forEach((slot: any) => {
-          if (slot.is_available) allSlots.add(slot.slot_time.substring(0, 5))
+          // Filtra horários de almoço de cada barbeiro
+          if (
+            slot.is_available &&
+            !isInLunchBreak(slot.slot_time.substring(0, 5), barber.lunch_start, barber.lunch_end)
+          ) {
+            allSlots.add(slot.slot_time.substring(0, 5))
+          }
         })
       }
     }
@@ -556,11 +572,17 @@ export default function ClientBooking({ onBookingComplete }: ClientBookingProps)
           p_service_duration_minutes: serviceDuration,
         })
 
-        if (!error && Array.isArray(data)) {
-          data.forEach((slot: any) => {
-            if (slot.is_available) allSlots.add(slot.slot_time.substring(0, 5))
-          })
-        }
+      if (!error && Array.isArray(data)) {
+        data.forEach((slot: any) => {
+          // Filtra horários de almoço de cada barbeiro
+          if (
+            slot.is_available &&
+            !isInLunchBreak(slot.slot_time.substring(0, 5), barber.lunch_start, barber.lunch_end)
+          ) {
+            allSlots.add(slot.slot_time.substring(0, 5))
+          }
+        })
+      }
       }
       const slotsArray = Array.from(allSlots).sort()
       setAvailableSlotsHorario(slotsArray)
@@ -590,7 +612,12 @@ export default function ClientBooking({ onBookingComplete }: ClientBookingProps)
     })
 
     if (!error && Array.isArray(data)) {
-      const slots = data.filter((slot: any) => slot.is_available).map((slot: any) => slot.slot_time.substring(0, 5))
+      const slots = data
+        .filter((slot: any) =>
+          slot.is_available &&
+          !isInLunchBreak(slot.slot_time.substring(0, 5), barbers.find(b => b.id === selectedBarberProfissional)?.lunch_start, barbers.find(b => b.id === selectedBarberProfissional)?.lunch_end)
+        )
+        .map((slot: any) => slot.slot_time.substring(0, 5))
       setAvailableSlotsProfissional(slots)
     } else {
       setAvailableSlotsProfissional([])
@@ -620,7 +647,12 @@ export default function ClientBooking({ onBookingComplete }: ClientBookingProps)
       })
 
       if (!error && Array.isArray(data)) {
-        const slots = data.filter((slot: any) => slot.is_available).map((slot: any) => slot.slot_time.substring(0, 5))
+        const slots = data
+          .filter((slot: any) =>
+            slot.is_available &&
+            !isInLunchBreak(slot.slot_time.substring(0, 5), barbers.find(b => b.id === selectedBarberProfissional)?.lunch_start, barbers.find(b => b.id === selectedBarberProfissional)?.lunch_end)
+          )
+          .map((slot: any) => slot.slot_time.substring(0, 5))
         setAvailableSlotsProfissional(slots)
       } else {
         setAvailableSlotsProfissional([])

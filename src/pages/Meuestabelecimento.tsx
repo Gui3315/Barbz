@@ -1,3 +1,11 @@
+  // Máscara para telefone (XX) XXXXX-XXXX
+  function maskPhone(value: string) {
+    return value
+      .replace(/\D/g, "")
+      .replace(/(\d{2})(\d)/, "($1) $2")
+      .replace(/(\d{5})(\d)/, "$1-$2")
+      .replace(/(-\d{4})\d+?$/, "$1");
+  }
 "use client"
 
 import { useEffect, useState } from "react"
@@ -18,7 +26,9 @@ export default function MeuEstabelecimento() {
   const [newBarberPhone, setNewBarberPhone] = useState("")
   const [newBarberActive, setNewBarberActive] = useState(true)
   const [editId, setEditId] = useState<string | null>(null)
-  const [editBarber, setEditBarber] = useState<{ name: string; phone: string; is_active: boolean } | null>(null)
+  const [editBarber, setEditBarber] = useState<{ name: string; phone: string; is_active: boolean; lunch_start?: string; lunch_end?: string } | null>(null)
+  const [newBarberLunchStart, setNewBarberLunchStart] = useState("")
+  const [newBarberLunchEnd, setNewBarberLunchEnd] = useState("")
 
   // Serviços
   const [services, setServices] = useState<any[]>([])
@@ -157,7 +167,7 @@ export default function MeuEstabelecimento() {
       // Fetch barbers
       const { data: barbersData } = await supabase
         .from("barbers")
-        .select("id, name, phone, is_active, created_at")
+        .select("id, name, phone, is_active, lunch_start, lunch_end, created_at")
         .eq("barbershop_id", shop.id)
         .order("created_at", { ascending: true })
       setBarbers(barbersData || [])
@@ -189,16 +199,20 @@ export default function MeuEstabelecimento() {
       user_id: user?.id,
       barbershop_id: shop.id,
       is_active: newBarberActive,
+      lunch_start: newBarberLunchStart || null,
+      lunch_end: newBarberLunchEnd || null,
     })
     if (!error) {
       setNewBarberName("")
       setNewBarberPhone("")
       setNewBarberActive(true)
+      setNewBarberLunchStart("")
+      setNewBarberLunchEnd("")
       toast({ title: "Barbeiro cadastrado!" })
       // Refresh list
       const { data } = await supabase
         .from("barbers")
-        .select("id, name, phone, is_active, created_at")
+        .select("id, name, phone, is_active, lunch_start, lunch_end, created_at")
         .eq("barbershop_id", shop.id)
         .order("created_at", { ascending: true })
       setBarbers(data || [])
@@ -214,6 +228,8 @@ export default function MeuEstabelecimento() {
       name: barber.name,
       phone: barber.phone || "",
       is_active: barber.is_active,
+      lunch_start: barber.lunch_start || "",
+      lunch_end: barber.lunch_end || "",
     })
   }
 
@@ -225,6 +241,8 @@ export default function MeuEstabelecimento() {
         name: editBarber.name,
         phone: editBarber.phone,
         is_active: editBarber.is_active,
+        lunch_start: editBarber.lunch_start || null,
+        lunch_end: editBarber.lunch_end || null,
       })
       .eq("id", barberId)
     if (!error) {
@@ -236,7 +254,7 @@ export default function MeuEstabelecimento() {
       if (shop) {
         const { data } = await supabase
           .from("barbers")
-          .select("id, name, phone, is_active, created_at")
+          .select("id, name, phone, is_active, lunch_start, lunch_end, created_at")
           .eq("barbershop_id", shop.id)
           .order("created_at", { ascending: true })
         setBarbers(data || [])
@@ -257,12 +275,12 @@ export default function MeuEstabelecimento() {
       // Refresh list
       const { data: shop } = await supabase.from("barbershops").select("id").eq("owner_id", user?.id).maybeSingle()
       if (shop) {
-        const { data } = await supabase
-          .from("barbers")
-          .select("id, name, phone, is_active, created_at")
-          .eq("barbershop_id", shop.id)
-          .order("created_at", { ascending: true })
-        setBarbers(data || [])
+      const { data } = await supabase
+        .from("barbers")
+        .select("id, name, phone, is_active, lunch_start, lunch_end, created_at")
+        .eq("barbershop_id", shop.id)
+        .order("created_at", { ascending: true })
+      setBarbers(data || [])
       }
     } else {
       toast({ title: "Erro ao remover barbeiro", description: error.message, variant: "destructive" })
@@ -376,7 +394,7 @@ export default function MeuEstabelecimento() {
                 </h2>
               </div>
               <div className="p-6">
-                <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div className="mb-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-2">Nome do barbeiro</label>
                     <Input
@@ -391,7 +409,26 @@ export default function MeuEstabelecimento() {
                     <Input
                       placeholder="(00) 00000-0000"
                       value={newBarberPhone}
-                      onChange={(e) => setNewBarberPhone(e.target.value)}
+                      onChange={(e) => setNewBarberPhone(maskPhone(e.target.value))}
+                      maxLength={15}
+                      className="border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Início do almoço</label>
+                    <Input
+                      type="time"
+                      value={newBarberLunchStart || ""}
+                      onChange={(e) => setNewBarberLunchStart(e.target.value)}
+                      className="border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">Fim do almoço</label>
+                    <Input
+                      type="time"
+                      value={newBarberLunchEnd || ""}
+                      onChange={(e) => setNewBarberLunchEnd(e.target.value)}
                       className="border-slate-200 focus:border-blue-500 focus:ring-blue-500"
                     />
                   </div>
@@ -434,7 +471,7 @@ export default function MeuEstabelecimento() {
                         className="bg-gradient-to-r from-slate-50 to-blue-50/30 rounded-xl border border-slate-200 p-4"
                       >
                         {editId === barber.id ? (
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                          <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
                             <Input
                               value={editBarber?.name || ""}
                               onChange={(e) =>
@@ -449,6 +486,24 @@ export default function MeuEstabelecimento() {
                                 setEditBarber((editBarber) => ({ ...editBarber!, phone: e.target.value }))
                               }
                               placeholder="Telefone"
+                              className="border-slate-200 focus:border-blue-500"
+                            />
+                            <Input
+                              type="time"
+                              value={editBarber?.lunch_start || ""}
+                              onChange={(e) =>
+                                setEditBarber((editBarber) => ({ ...editBarber!, lunch_start: e.target.value }))
+                              }
+                              placeholder="Início do almoço"
+                              className="border-slate-200 focus:border-blue-500"
+                            />
+                            <Input
+                              type="time"
+                              value={editBarber?.lunch_end || ""}
+                              onChange={(e) =>
+                                setEditBarber((editBarber) => ({ ...editBarber!, lunch_end: e.target.value }))
+                              }
+                              placeholder="Fim do almoço"
                               className="border-slate-200 focus:border-blue-500"
                             />
                             <label className="flex items-center gap-2 text-sm">
@@ -489,14 +544,19 @@ export default function MeuEstabelecimento() {
                               <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-full flex items-center justify-center text-white font-bold text-lg shrink-0">
                                 {barber.name.charAt(0).toUpperCase()}
                               </div>
-                              <div className="flex flex-col w-full min-w-0">
-                                <h3 className="font-semibold text-slate-800 text-base break-words leading-tight w-full min-w-0">
-                                  {barber.name}
-                                </h3>
-                                {barber.phone && (
-                                  <p className="text-sm text-slate-600 break-all w-full min-w-0">{barber.phone}</p>
-                                )}
-                              </div>
+                          <div className="flex flex-col w-full min-w-0">
+                            <h3 className="font-semibold text-slate-800 text-base break-words leading-tight w-full min-w-0">
+                              {barber.name}
+                            </h3>
+                            {barber.phone && (
+                              <p className="text-sm text-slate-600 break-all w-full min-w-0">{barber.phone}</p>
+                            )}
+                            {(barber.lunch_start || barber.lunch_end) && (
+                              <p className="text-xs text-slate-500 mt-1">
+                                Almoço: {barber.lunch_start ? barber.lunch_start.slice(0,5) : '--:--'} às {barber.lunch_end ? barber.lunch_end.slice(0,5) : '--:--'}
+                              </p>
+                            )}
+                          </div>
                             </div>
                             <div className="flex flex-row items-center gap-2 mt-2 sm:mt-0">
                               <span
