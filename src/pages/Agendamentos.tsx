@@ -59,8 +59,18 @@ export default function Agendamentos() {
   const [selectedBarber, setSelectedBarber] = useState<string | null>(null)
   const [selectedService, setSelectedService] = useState<string | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
-  const [clientId, setClientId] = useState<string | null>(null)
-  const [clients, setClients] = useState<Client[]>([])
+  // Campos para cliente não cadastrado
+  const [clientName, setClientName] = useState<string>("")
+  const [clientPhone, setClientPhone] = useState<string>("")
+
+  // Máscara automática para telefone
+  function formatPhone(value: string) {
+    let v = value.replace(/\D/g, "").slice(0, 11)
+    if (v.length <= 2) return v
+    if (v.length <= 7) return `(${v.slice(0,2)}) ${v.slice(2)}`
+    if (v.length <= 11) return `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`
+    return v
+  }
   const [sheetOpen, setSheetOpen] = useState(false)
 
   // Dados reais do banco
@@ -157,9 +167,7 @@ export default function Agendamentos() {
           price: s.price,
         })),
       )
-      // Buscar clientes
-      const { data: clientsData } = await supabase.from("clients").select("id, name")
-      setClients(clientsData || [])
+
 
       // Buscar barbershop_id do usuário logado
       const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
@@ -193,17 +201,26 @@ export default function Agendamentos() {
       }
       // Mapear para o formato esperado pelo componente
       setAppointments(
-        (appointmentsData || []).map((a: any) => ({
-          id: a.appointment_id,
-          start_at: a.start_at,
-          end_at: a.end_at,
-          status: a.status,
-          total_price: a.total_price,
-          notes: a.notes,
-          client: { name: a.client_name },
-          service: { name: a.service_name },
-          barber: { name: a.barber_name },
-        })),
+        (appointmentsData || []).map((a: any) => {
+          let clientName = a.client_name
+          // Sempre tenta extrair do notes se houver
+          if (a.notes && a.notes.includes('Nome:')) {
+            const match = a.notes.match(/Nome: ([^|]+)/)
+            if (match) clientName = match[1].trim()
+          }
+          if (!clientName) clientName = "Cliente não informado"
+          return {
+            id: a.appointment_id,
+            start_at: a.start_at,
+            end_at: a.end_at,
+            status: a.status,
+            total_price: a.total_price,
+            notes: a.notes,
+            client: { name: clientName },
+            service: { name: a.service_name },
+            barber: { name: a.barber_name },
+          }
+        })
       )
       setLoading(false)
     }
@@ -214,11 +231,12 @@ export default function Agendamentos() {
     setSelectedBarber(null)
     setSelectedService(null)
     setSelectedTime(null)
-    setClientId(null)
+    setClientName("")
+    setClientPhone("")
   }
 
   const handleCreateAppointment = async () => {
-    if (!clientId || !selectedBarber || !selectedService || !selectedTime || !selectedDate) {
+    if (!clientName.trim() || !clientPhone.trim() || !selectedBarber || !selectedService || !selectedTime || !selectedDate) {
       toast({
         title: "Campos obrigatórios",
         description: "Preencha todos os campos obrigatórios.",
@@ -254,19 +272,49 @@ export default function Agendamentos() {
       const { data: barbershopData } = await supabase.from("barbershops").select("id").eq("owner_id", user_id).single()
       barbershop_id = barbershopData?.id || null
     }
-    // Chamar a função RPC create_appointment
-    const { error } = await supabase.rpc("create_appointment", {
-      p_barbershop_id: barbershop_id,
-      p_start_at: start_at,
-      p_service_ids: [selectedService],
-      p_client_id: clientId,
-      p_barber_id: selectedBarber,
-      p_notes: null,
-    })
-    if (error) {
+    // Inserir appointment para cliente não cadastrado
+    const { data: appointmentData, error: appointmentError } = await supabase
+      .from("appointments")
+      .insert([
+        {
+          barbershop_id: barbershop_id,
+          barber_id: selectedBarber,
+          start_at,
+          end_at,
+          status: "pending",
+          total_price,
+          client_id: null,
+          user_id: user_id,
+          notes: `Nome: ${clientName} | Telefone: ${clientPhone}`,
+        },
+      ])
+      .select()
+      .single()
+    if (appointmentError || !appointmentData) {
       toast({
         title: "Erro ao criar agendamento",
-        description: error?.message || "Erro ao criar agendamento",
+        description: appointmentError?.message || "Erro ao criar agendamento",
+        variant: "destructive",
+      })
+      return
+    }
+    // Inserir na appointment_services com snapshots
+    const serviceObj = services.find((s) => s.id === selectedService)
+    const { error: asError } = await supabase
+      .from("appointment_services")
+      .insert([
+        {
+          appointment_id: appointmentData.id,
+          service_id: selectedService,
+          duration_minutes_snapshot: serviceObj?.duration_minutes || 30,
+          name_snapshot: serviceObj?.name || "",
+          price_snapshot: serviceObj ? Number(serviceObj.price) : 0,
+        },
+      ])
+    if (asError) {
+      toast({
+        title: "Erro ao vincular serviço",
+        description: asError?.message || "Erro ao vincular serviço ao agendamento.",
         variant: "destructive",
       })
       return
@@ -410,21 +458,25 @@ export default function Agendamentos() {
                   </SheetHeader>
                   <div className="space-y-6 mt-6">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">Cliente</label>
-                      <div className="relative">
-                        <select
-                          className="w-full px-3 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
-                          value={clientId || ""}
-                          onChange={(e) => setClientId(e.target.value)}
-                        >
-                          <option value="">Selecione o cliente</option>
-                          {clients.map((client) => (
-                            <option key={client.id} value={client.id}>
-                              {client.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <label className="text-sm font-medium text-slate-700">Nome do Cliente</label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                        placeholder="Nome completo"
+                        value={clientName}
+                        onChange={(e) => setClientName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-700">Telefone do Cliente</label>
+                      <input
+                        type="tel"
+                        className="w-full px-3 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all"
+                        placeholder="(99) 99999-9999"
+                        value={clientPhone}
+                        onChange={(e) => setClientPhone(formatPhone(e.target.value))}
+                        maxLength={15}
+                      />
                     </div>
 
                     <div className="space-y-2">
@@ -450,11 +502,12 @@ export default function Agendamentos() {
                             type="button"
                             variant={selectedBarber === barber.id ? "default" : "outline"}
                             onClick={() => setSelectedBarber(barber.id)}
-                            className={`justify-start h-auto py-3 rounded-xl transition-all ${
-                              selectedBarber === barber.id
-                                ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
-                                : "bg-white/80 backdrop-blur-sm border-slate-200 hover:bg-blue-50 hover:border-blue-300"
-                            }`}
+                        className={`justify-start h-auto py-3 rounded-xl transition-all overflow-hidden ${
+                          selectedBarber === barber.id
+                            ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                            : "bg-white/80 backdrop-blur-sm border-slate-200 hover:bg-blue-50 hover:border-blue-300"
+                        }`}
+                        style={{ textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}
                           >
                             {barber.name}
                           </Button>
@@ -516,7 +569,7 @@ export default function Agendamentos() {
 
                     <Button
                       className="w-full mt-6 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg hover:shadow-xl transition-all duration-200 py-3 rounded-xl"
-                      disabled={!selectedBarber || !selectedService || !selectedTime || !clientId}
+                      disabled={!selectedBarber || !selectedService || !selectedTime || !clientName.trim() || !clientPhone.trim()}
                       onClick={handleCreateAppointment}
                     >
                       Confirmar Agendamento
@@ -589,13 +642,6 @@ export default function Agendamentos() {
                           </div>
                           <div className="text-sm text-slate-500 mt-1">{appointment.barber?.name || "Barbeiro"}</div>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="bg-white/80 backdrop-blur-sm border-slate-200 hover:bg-blue-50 hover:border-blue-300 transition-all rounded-lg"
-                        >
-                          Detalhes
-                        </Button>
                       </div>
                     </div>
                   ))
