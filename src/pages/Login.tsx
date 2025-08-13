@@ -271,7 +271,7 @@ export default function Login() {
       options: {
         data: {
           user_name: name,
-          user_type: userType === "proprietario" ? "Proprietário" : userType,
+          user_type: userType === "proprietario" ? "proprietario" : userType,
           phone: phone,
           cnpj: userType === "proprietario" ? cnpj : "",
           business_name: userType === "proprietario" ? businessName : "",
