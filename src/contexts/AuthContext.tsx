@@ -224,12 +224,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-  console.log("🚀 LOGIN SIMPLES - Iniciando para:", email);
+  console.log("🚀 LOGIN COM TIMEOUT - Iniciando para:", email);
   setLoading(true);
   
   try {
-    console.log("📡 Chamando signInWithPassword...");
-    const result = await supabase.auth.signInWithPassword({ email, password });
+    console.log("📡 Chamando signInWithPassword com timeout...");
+    
+    // Adiciona timeout de 10 segundos
+    const loginPromise = supabase.auth.signInWithPassword({ email, password });
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Timeout: Login demorou mais de 10 segundos")), 10000)
+    );
+    
+    const result = await Promise.race([loginPromise, timeoutPromise]) as any;
     console.log("📊 Resultado completo:", result);
     
     const { data, error } = result;
@@ -252,15 +259,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     console.log("✅ Login OK, usuário:", data.user.id);
     
-    // Criar usuário simples sem consultar profiles
-    const simpleUser: AuthUser = {
-      id: data.user.id,
-      email: data.user.email!,
-      user_type: "proprietario" // hardcoded para teste
-    };
-    
-    console.log("✅ Definindo usuário:", simpleUser);
-    setUser(simpleUser);
+    // Bootstrap e busca de perfil
+    if (!bootstrappedRef.current) {
+      await bootstrapAfterLogin(data.user);
+      bootstrappedRef.current = true;
+    }
+
+    // Busca perfil real
+    let { data: profile } = await supabase
+      .from("profiles")
+      .select("user_type")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (!profile) {
+      await new Promise((r) => setTimeout(r, 300));
+      ({ data: profile } = await supabase
+        .from("profiles")
+        .select("user_type")
+        .eq("id", data.user.id)
+        .maybeSingle());
+    }
+
+    if (!profile) {
+      setUser(null);
+      setLoading(false);
+      throw new Error("Perfil não encontrado");
+    }
+
+    const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
+    setUser({ id: data.user.id, email: data.user.email!, user_type: userType });
     
   } catch (error) {
     console.error("❌ ERRO GERAL:", error);
