@@ -187,36 +187,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     fetchUser();
     // Listen to auth changes
-    console.log("👂 Configurando listener de auth changes");
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("🔔 Auth state changed:", { event, hasSession: !!session });
-      if (session?.user) {
-        if (!bootstrappedRef.current) {
-          await bootstrapAfterLogin(session.user);
-          bootstrappedRef.current = true;
-        }
-        supabase
-          .from("profiles")
-          .select("user_type")
-          .eq("id", session.user.id)
-          .maybeSingle()
-          .then(async ({ data: profile, error }) => {
-            if (error) {
-              await forceLogout();
-              return;
-            }
-            if (profile) {
-              const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
-              setUser({ id: session.user!.id, email: session.user!.email!, user_type: userType });
-            } else {
-              setUser(null);
-            }
-          });
-      } else {
-        setUser(null);
-        bootstrappedRef.current = false;
-      }
-    });
+console.log("👂 Configurando listener de auth changes");
+const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+  console.log("🔔 Auth state changed:", { event, hasSession: !!session });
+  
+  if (session?.user) {
+    console.log("👤 Processando usuário logado:", session.user.id);
+    
+    if (!bootstrappedRef.current) {
+      await bootstrapAfterLogin(session.user);
+      bootstrappedRef.current = true;
+    }
+    
+    // Busca perfil
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("user_type")
+      .eq("id", session.user.id)
+      .maybeSingle();
+    
+    if (profile) {
+      const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
+      console.log("✅ Definindo usuário:", { id: session.user.id, userType });
+      setUser({ id: session.user.id, email: session.user.email!, user_type: userType });
+    } else {
+      console.log("❌ Perfil não encontrado");
+      setUser(null);
+    }
+    
+    setLoading(false);
+  } else {
+    console.log("🚪 Logout detectado");
+    setUser(null);
+    bootstrappedRef.current = false;
+    setLoading(false);
+  }
+});
     return () => {
       console.log("🧹 Limpando listener");
       listener?.subscription.unsubscribe();
@@ -224,80 +230,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-  console.log("🚀 LOGIN COM TIMEOUT - Iniciando para:", email);
+  console.log("🚀 LOGIN SIMPLIFICADO - Iniciando para:", email);
   setLoading(true);
   
   try {
-    console.log("📡 Chamando signInWithPassword com timeout...");
+    console.log("📡 Chamando signInWithPassword...");
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     
-    // Adiciona timeout de 10 segundos
-    const loginPromise = supabase.auth.signInWithPassword({ email, password });
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error("Timeout: Login demorou mais de 10 segundos")), 10000)
-    );
-    
-    const result = await Promise.race([loginPromise, timeoutPromise]) as any;
-    console.log("📊 Resultado completo:", result);
-    
-    const { data, error } = result;
-    console.log("📋 Data:", data);
-    console.log("❌ Error:", error);
+    console.log("📊 Resultado:", { hasData: !!data, hasUser: !!data?.user, error: error?.message });
     
     if (error) {
-      console.error("❌ Erro encontrado:", error);
+      console.error("❌ Erro do Supabase:", error);
       setUser(null);
       setLoading(false);
       throw error;
     }
     
-    if (!data.user) {
-      console.error("❌ Usuário não retornado");
-      setUser(null);
-      setLoading(false);
-      throw new Error("Usuário não encontrado");
-    }
-    
-    console.log("✅ Login OK, usuário:", data.user.id);
-    
-    // Bootstrap e busca de perfil
-    if (!bootstrappedRef.current) {
-      await bootstrapAfterLogin(data.user);
-      bootstrappedRef.current = true;
-    }
-
-    // Busca perfil real
-    let { data: profile } = await supabase
-      .from("profiles")
-      .select("user_type")
-      .eq("id", data.user.id)
-      .maybeSingle();
-
-    if (!profile) {
-      await new Promise((r) => setTimeout(r, 300));
-      ({ data: profile } = await supabase
-        .from("profiles")
-        .select("user_type")
-        .eq("id", data.user.id)
-        .maybeSingle());
-    }
-
-    if (!profile) {
-      setUser(null);
-      setLoading(false);
-      throw new Error("Perfil não encontrado");
-    }
-
-    const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
-    setUser({ id: data.user.id, email: data.user.email!, user_type: userType });
+    console.log("✅ Login concluído - aguardando listener processar");
+    // NÃO setamos o user aqui - deixamos o listener fazer isso
     
   } catch (error) {
     console.error("❌ ERRO GERAL:", error);
     setUser(null);
-    throw error;
-  } finally {
-    console.log("🏁 Finalizando - setLoading(false)");
     setLoading(false);
+    throw error;
   }
+  // NÃO fazemos setLoading(false) aqui - deixamos o listener fazer
 };
 
   const logout = async () => {
