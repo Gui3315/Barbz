@@ -223,40 +223,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   setLoading(true);
   
   try {
+    console.log("📡 Chamando supabase.auth.signInWithPassword...");
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    console.log("📊 Resposta do signIn:", { data, error });
+    console.log("📊 Resposta do signIn:", { 
+      hasUser: !!data?.user, 
+      userId: data?.user?.id,
+      error: error?.message 
+    });
     
     if (error || !data.user) {
       console.error("❌ Erro no signIn:", error);
+      setUser(null);
+      setLoading(false);
       throw error;
     }
 
-    console.log("✅ Login no Supabase OK, buscando perfil...");
+    console.log("✅ Login no Supabase OK, checando bootstrap...");
 
     // Bootstrap e definição do tipo após login
     if (!bootstrappedRef.current) {
       console.log("🔧 Executando bootstrap...");
-      await bootstrapAfterLogin(data.user);
+      try {
+        await bootstrapAfterLogin(data.user);
+        console.log("✅ Bootstrap concluído");
+      } catch (bootstrapError) {
+        console.error("⚠️ Erro no bootstrap (mas continuando):", bootstrapError);
+      }
       bootstrappedRef.current = true;
+    } else {
+      console.log("⏭️ Bootstrap já executado, pulando...");
     }
 
-    let { data: profile } = await supabase
+    console.log("🔍 Buscando perfil para userId:", data.user.id);
+    let { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("user_type")
       .eq("id", data.user.id)
       .maybeSingle();
       
-    console.log("👤 Perfil encontrado:", profile);
+    console.log("👤 Resultado da busca do perfil:", { profile, error: profileError });
     
-    if (!profile) {
-      console.log("⏳ Perfil não encontrado, aguardando...");
+    if (!profile && !profileError) {
+      console.log("⏳ Perfil não encontrado, aguardando 300ms...");
       await new Promise((r) => setTimeout(r, 300));
-      ({ data: profile } = await supabase
+      
+      const result = await supabase
         .from("profiles")
         .select("user_type")
         .eq("id", data.user.id)
-        .maybeSingle());
-      console.log("👤 Perfil após espera:", profile);
+        .maybeSingle();
+        
+      profile = result.data;
+      console.log("👤 Perfil após segunda tentativa:", profile);
     }
     
     if (!profile) {
@@ -266,19 +284,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Perfil não encontrado");
     }
     
-    const userType: "proprietario" | "cliente" = profile.user_type === "proprietario" ? "proprietario" : "cliente";
-const newUser: AuthUser = { 
-  id: data.user.id, 
-  email: data.user.email!, 
-  user_type: userType 
-};
+    const newUser: AuthUser = { 
+      id: data.user.id, 
+      email: data.user.email!, 
+      user_type: profile.user_type === "proprietario" ? "proprietario" : "cliente"
+    };
     
-    console.log("✅ Definindo usuário:", newUser);
+    console.log("✅ Definindo usuário no estado:", newUser);
     setUser(newUser);
+    console.log("✅ Finalizando login, setLoading(false)");
     setLoading(false);
     
   } catch (error) {
-    console.error("❌ Erro no login:", error);
+    console.error("❌ Erro geral no login:", error);
     setUser(null);
     setLoading(false);
     throw error;
