@@ -78,6 +78,7 @@ export default function Agendamentos() {
   const [barbers, setBarbers] = useState<Barber[]>([])
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
+  const [profilesData, setProfilesData] = useState<any[]>([])
 
   // Horários disponíveis para o barbeiro/serviço/data selecionados
   const [availableTimes, setAvailableTimes] = useState<string[]>([])
@@ -193,34 +194,27 @@ export default function Agendamentos() {
           p_end_date: endDate,
         })
         if (error) {
+          console.error("Erro ao buscar agendamentos:", error)
           setAppointments([])
           setLoading(false)
           return
         }
         appointmentsData = data || []
+        
       }
-      // Mapear para o formato esperado pelo componente
+      // Mapear para o formato esperado pelo componente - usar dados direto da RPC
       setAppointments(
-        (appointmentsData || []).map((a: any) => {
-          let clientName = a.client_name
-          // Sempre tenta extrair do notes se houver
-          if (a.notes && a.notes.includes('Nome:')) {
-            const match = a.notes.match(/Nome: ([^|]+)/)
-            if (match) clientName = match[1].trim()
-          }
-          if (!clientName) clientName = "Cliente não informado"
-          return {
-            id: a.appointment_id,
-            start_at: a.start_at,
-            end_at: a.end_at,
-            status: a.status,
-            total_price: a.total_price,
-            notes: a.notes,
-            client: { name: clientName },
-            service: { name: a.service_name },
-            barber: { name: a.barber_name },
-          }
-        })
+        (appointmentsData || []).map((a: any) => ({
+          id: a.id,
+          start_at: a.start_at,
+          end_at: a.end_at,
+          status: a.status,
+          total_price: a.total_price,
+          notes: a.notes,
+          client: { name: a.client_name },
+          service: { name: a.service_name },
+          barber: { name: a.barber_name },
+        }))
       )
       setLoading(false)
     }
@@ -325,47 +319,40 @@ export default function Agendamentos() {
     })
     setSheetOpen(false)
     resetNewAppointment()
-    // Refetch agendamentos do dia selecionado
-    if (selectedDate) {
-      const year = selectedDate.getUTCFullYear()
-      const month = String(selectedDate.getUTCMonth() + 1).padStart(2, "0")
-      const day = String(selectedDate.getUTCDate()).padStart(2, "0")
-      const startUTC = `${year}-${month}-${day}T00:00:00+00:00`
-      const nextDay = new Date(Date.UTC(year, Number(month) - 1, Number(day) + 1))
-      const nextYear = nextDay.getUTCFullYear()
-      const nextMonth = String(nextDay.getUTCMonth() + 1).padStart(2, "0")
-      const nextDayStr = String(nextDay.getUTCDate()).padStart(2, "0")
-      const endUTC = `${nextYear}-${nextMonth}-${nextDayStr}T00:00:00+00:00`
-      const { data: appointmentsData } = await supabase
-        .from("appointments")
-        .select("*")
-        .gte("start_at", startUTC)
-        .lt("start_at", endUTC)
-      // Buscar appointment_services para os appointments do dia
-      const appointmentIds = (appointmentsData || []).map((a: any) => a.id)
-      let appointmentServicesData: any[] = []
-      if (appointmentIds.length > 0) {
-        const { data: asData } = await supabase
-          .from("appointment_services")
-          .select("appointment_id, service_id")
-          .in("appointment_id", appointmentIds)
-        appointmentServicesData = asData || []
+    // Refetch usando a mesma lógica do useEffect
+    const currentUser = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
+    let barbershopId = null
+    if (currentUser) {
+      const { data: barbershop } = await supabase.from("barbershops").select("id").eq("owner_id", currentUser.id).single()
+      if (barbershop) {
+        barbershopId = barbershop.id
       }
-      // Buscar clientes, barbeiros, serviços
-      const { data: barbersData } = await supabase.from("barbers").select("*")
-      const { data: servicesData } = await supabase.from("services").select("*")
-      const { data: clientsData } = await supabase.from("clients").select("id, name")
+    }
+
+    if (barbershopId && selectedDate) {
+      const year = selectedDate.getFullYear()
+      const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
+      const day = String(selectedDate.getDate()).padStart(2, "0")
+      const startDate = `${year}-${month}-${day}T00:00:00`
+      const endDate = `${year}-${month}-${day}T23:59:59`
+      const { data } = await supabase.rpc("get_appointments_with_clients", {
+        p_barbershop_id: barbershopId,
+        p_start_date: startDate,
+        p_end_date: endDate,
+      })
+      
       setAppointments(
-        (appointmentsData || []).map((a: any) => {
-          const appService = appointmentServicesData.find((as) => as.appointment_id === a.id)
-          const service = appService ? servicesData?.find((s: any) => s.id === appService.service_id) : null
-          return {
-            ...a,
-            client: clientsData?.find((c: any) => c.id === a.client_id) || null,
-            service: service || null,
-            barber: barbersData?.find((b: any) => b.id === a.barber_id) || null,
-          }
-        }),
+        (data || []).map((a: any) => ({
+          id: a.id,
+          start_at: a.start_at,
+          end_at: a.end_at,
+          status: a.status,
+          total_price: a.total_price,
+          notes: a.notes,
+          client: { name: a.client_name },
+          service: { name: a.service_name },
+          barber: { name: a.barber_name },
+        }))
       )
     }
   }
@@ -613,15 +600,16 @@ export default function Agendamentos() {
                     >
                       <div className="flex items-center">
                         <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center text-white font-semibold shadow-lg">
-                          {appointment.client?.name
+                          {appointment.client?.name && appointment.client.name !== "Cliente não informado"
                             ? appointment.client.name
                                 .split(" ")
                                 .map((name: string) => name[0])
                                 .join("")
-                            : "C"}
+                                .substring(0, 2)
+                            : "CN"}
                         </div>
                         <div className="ml-4">
-                          <div className="font-semibold text-slate-800">{appointment.client?.name || "Cliente"}</div>
+                          <div className="font-semibold text-slate-800">{appointment.client?.name || "Cliente não informado"}</div>
                           <div className="text-sm text-slate-600">
                             {appointment.service?.name || "Serviço selecionado"}
                           </div>
