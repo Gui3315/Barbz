@@ -46,25 +46,22 @@ export default function Login() {
   const user = auth.user;
   const authLoading = auth.loading;
 
-  // Redireciona automaticamente se já estiver autenticado ou após login
-  useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        supabase
-          .from("profiles")
-          .select("user_type")
-          .eq("id", session.user.id)
-          .single()
-          .then(({ data: profileData }) => {
-            const targetRoute = profileData?.user_type === "proprietario" ? "/agendamentos" : "/cliente";
-            navigate(targetRoute);
-          });
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+  // Redireciona quando user for carregado
+useEffect(() => {
+  if (user && !authLoading) {
+    // Busca o tipo do usuário e redireciona
+    supabase
+      .from("profiles")
+      .select("user_type")
+      .eq("id", user.id)
+      .single()
+      .then(({ data: profileData }) => {
+        const targetRoute = profileData?.user_type === "proprietario" ? "/agendamentos" : "/cliente";
+        navigate(targetRoute);
+      });
+  }
+}, [user, authLoading, navigate]);
+
   const [phone, setPhone] = useState("")
   const [businessName, setBusinessName] = useState("")
   const [address, setAddress] = useState("")
