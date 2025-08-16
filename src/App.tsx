@@ -28,7 +28,6 @@ const App = () => {
         }
       },
       onOfflineReady() {
-        console.log('Barbz pronto para funcionar offline');
       },
     });
   }, []);

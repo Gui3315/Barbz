@@ -72,7 +72,6 @@ export default function Login() {
   // Redireciona se já estiver logado
   useEffect(() => {
     if (user) {
-      console.log("✅ Usuário já logado, redirecionando:", user.user_type);
       const targetRoute = user.user_type === "proprietario" ? "/agendamentos" : "/cliente";
       navigate(targetRoute);
     }
@@ -99,7 +98,6 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("🎯 Iniciando login para:", email);
     setLoading(true);
     setError(null);
     setSuccess(null);
@@ -108,7 +106,6 @@ export default function Login() {
     
     try {
       // 1. Faz login no Supabase
-      console.log("📡 Fazendo login no Supabase...");
       const { data, error } = await supabase.auth.signInWithPassword({
         email: emailNorm,
         password
@@ -127,8 +124,6 @@ export default function Login() {
         return;
       }
 
-      console.log("✅ Login realizado, buscando perfil...");
-
       // 2. Busca o perfil do usuário para pegar o user_type
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
@@ -143,8 +138,6 @@ export default function Login() {
         return;
       }
 
-      console.log("👤 Perfil encontrado:", profile);
-
       // 3. Cria objeto do usuário
       const authUser = {
         id: data.user.id,
@@ -157,7 +150,6 @@ export default function Login() {
 
       // 5. Redireciona baseado no tipo
       const targetRoute = profile.user_type === "proprietario" ? "/agendamentos" : "/cliente";
-      console.log("🚀 Redirecionando para:", targetRoute);
       navigate(targetRoute);
 
     } catch (err: any) {
