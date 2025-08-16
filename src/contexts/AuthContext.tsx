@@ -19,13 +19,14 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const bootstrappedRef = useRef(false);
+  const bootstrappedRef = useRef<Set<string>>(new Set());
+  const isInitializedRef = useRef(false);
 
   // Força logout e limpa storage do Supabase
   const forceLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
-    bootstrappedRef.current = false;
+    bootstrappedRef.current.clear();
     try {
       localStorage.removeItem('supabase.auth.token');
       localStorage.removeItem('sb-' + import.meta.env.VITE_SUPABASE_ANON_KEY + '-auth-token');
@@ -35,7 +36,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Bootstrap pós-login: ajusta perfil e cria recursos iniciais conforme metadata do usuário
   const bootstrapAfterLogin = async (supaUser: { id: string; email?: string | null; user_metadata?: any }) => {
-    if (!supaUser) return;
+    if (!supaUser || bootstrappedRef.current.has(supaUser.id)) {
+      console.log("🚫 Bootstrap pulado - já executado para:", supaUser?.id);
+      return;
+    }
+
+    console.log("🚀 Iniciando bootstrap para:", supaUser.id);
+    bootstrappedRef.current.add(supaUser.id);
+    
     const md = (supaUser.user_metadata || {}) as any;
     const sb: any = supabase;
 
@@ -138,130 +146,165 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })
           .eq("id", supaUser.id);
       }
-    } catch {
-      // não bloquear login por erro de bootstrap
+      console.log("✅ Bootstrap concluído para:", supaUser.id);
+    } catch (error) {
+      console.error("❌ Erro no bootstrap:", error);
+      // Remove da lista para permitir retry
+      bootstrappedRef.current.delete(supaUser.id);
     }
   };
 
-  useEffect(() => {
-      console.log("🔄 AuthContext useEffect - Iniciando");
-    async function fetchUser() {
-          console.log("👤 fetchUser - Executando");
-      setLoading(true);
-      const { data, error } = await supabase.auth.getUser();
-      const supaUser = data?.user;
-      if (error || !supaUser) {
-        await forceLogout();
-        setLoading(false);
-        return;
-      }
-
-      // Bootstrap pós login (idempotente, evitar duplicidade)
-      if (!bootstrappedRef.current) {
-        await bootstrapAfterLogin(supaUser);
-        bootstrappedRef.current = true;
-      }
-
-      // Busca perfil com resiliência (talvez o trigger ainda não preencheu)
+  // Função para processar usuário autenticado
+  const processAuthenticatedUser = async (supaUser: any) => {
+    console.log("👤 Processando usuário autenticado:", supaUser.id);
+    
+    try {
+      // Bootstrap se necessário
+      await bootstrapAfterLogin(supaUser);
+      
+      // Busca perfil com retry
       let { data: profile } = await supabase
         .from("profiles")
         .select("user_type")
         .eq("id", supaUser.id)
         .maybeSingle();
+        
       if (!profile) {
-        await new Promise((r) => setTimeout(r, 300));
+        console.log("⏳ Perfil não encontrado, aguardando...");
+        await new Promise((r) => setTimeout(r, 500));
         ({ data: profile } = await supabase
           .from("profiles")
           .select("user_type")
           .eq("id", supaUser.id)
           .maybeSingle());
       }
+      
       if (!profile) {
+        console.log("❌ Perfil ainda não encontrado após retry");
         setUser(null);
         setLoading(false);
         return;
       }
+      
       const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
-      setUser({ id: supaUser.id, email: supaUser.email!, user_type: userType });
-      setLoading(false);
-    }
-    fetchUser();
-    // Listen to auth changes
-console.log("👂 Configurando listener de auth changes");
-const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-  console.log("🔔 Auth state changed:", { event, hasSession: !!session });
-  
-  if (session?.user) {
-    console.log("👤 Processando usuário logado:", session.user.id);
-    
-    if (!bootstrappedRef.current) {
-      await bootstrapAfterLogin(session.user);
-      bootstrappedRef.current = true;
-    }
-    
-    // Busca perfil
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("user_type")
-      .eq("id", session.user.id)
-      .maybeSingle();
-    
-    if (profile) {
-      const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
-      console.log("✅ Definindo usuário:", { id: session.user.id, userType });
-      setUser({ id: session.user.id, email: session.user.email!, user_type: userType });
-    } else {
-      console.log("❌ Perfil não encontrado");
+      console.log("✅ Definindo usuário:", { id: supaUser.id, userType });
+      
+      setUser({ 
+        id: supaUser.id, 
+        email: supaUser.email!, 
+        user_type: userType 
+      });
+      
+    } catch (error) {
+      console.error("❌ Erro ao processar usuário:", error);
       setUser(null);
     }
     
     setLoading(false);
-  } else {
-    console.log("🚪 Logout detectado");
-    setUser(null);
-    bootstrappedRef.current = false;
-    setLoading(false);
-  }
-});
+  };
+
+  useEffect(() => {
+    console.log("🔄 AuthContext useEffect - Iniciando");
+    
+    let isMounted = true;
+    
+    const initializeAuth = async () => {
+      if (isInitializedRef.current) return;
+      isInitializedRef.current = true;
+      
+      try {
+        setLoading(true);
+        
+        // Setup listener primeiro
+        console.log("👂 Configurando listener de auth changes");
+        const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+          if (!isMounted) return;
+          
+          console.log("🔔 Auth state changed:", { event, hasSession: !!session });
+          
+          if (session?.user) {
+            await processAuthenticatedUser(session.user);
+          } else {
+            console.log("🚪 Logout detectado");
+            setUser(null);
+            bootstrappedRef.current.clear();
+            setLoading(false);
+          }
+        });
+        
+        // Depois verifica se já tem usuário
+        console.log("👤 Verificando usuário atual");
+        const { data, error } = await supabase.auth.getUser();
+        
+        if (!isMounted) return;
+        
+        if (error || !data?.user) {
+          console.log("❌ Nenhum usuário encontrado ou erro:", error?.message);
+          await forceLogout();
+          setLoading(false);
+          return;
+        }
+        
+        // Se tem usuário, processa
+        await processAuthenticatedUser(data.user);
+        
+        // Cleanup function
+        return () => {
+          console.log("🧹 Limpando listener");
+          listener?.subscription.unsubscribe();
+        };
+        
+      } catch (error) {
+        console.error("❌ Erro na inicialização:", error);
+        if (isMounted) {
+          setUser(null);
+          setLoading(false);
+        }
+      }
+    };
+    
+    const cleanup = initializeAuth();
+    
     return () => {
-      console.log("🧹 Limpando listener");
-      listener?.subscription.unsubscribe();
+      isMounted = false;
+      cleanup?.then(cleanupFn => cleanupFn?.());
     };
   }, []);
 
   const login = async (email: string, password: string) => {
-  console.log("🚀 LOGIN SIMPLIFICADO - Iniciando para:", email);
-  setLoading(true);
-  
-  try {
-    console.log("📡 Chamando signInWithPassword...");
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log("🚀 LOGIN - Iniciando para:", email);
+    setLoading(true);
     
-    console.log("📊 Resultado:", { hasData: !!data, hasUser: !!data?.user, error: error?.message });
-    
-    if (error) {
-      console.error("❌ Erro do Supabase:", error);
+    try {
+      console.log("📡 Chamando signInWithPassword...");
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      
+      console.log("📊 Resultado:", { hasData: !!data, hasUser: !!data?.user, error: error?.message });
+      
+      if (error) {
+        console.error("❌ Erro do Supabase:", error);
+        setUser(null);
+        setLoading(false);
+        throw error;
+      }
+      
+      console.log("✅ Login iniciado - aguardando processamento via listener");
+      // O listener vai processar e setar loading(false)
+      
+    } catch (error) {
+      console.error("❌ ERRO GERAL no login:", error);
       setUser(null);
       setLoading(false);
       throw error;
     }
-    
-    console.log("✅ Login concluído - aguardando listener processar");
-    // NÃO setamos o user aqui - deixamos o listener fazer isso
-    
-  } catch (error) {
-    console.error("❌ ERRO GERAL:", error);
-    setUser(null);
-    setLoading(false);
-    throw error;
-  }
-  // NÃO fazemos setLoading(false) aqui - deixamos o listener fazer
-};
+  };
 
   const logout = async () => {
+    console.log("🚪 Fazendo logout");
     await supabase.auth.signOut();
     setUser(null);
-    bootstrappedRef.current = false;
+    bootstrappedRef.current.clear();
+    setLoading(false);
   };
 
   return (
