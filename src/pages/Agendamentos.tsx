@@ -93,29 +93,56 @@ export default function Agendamentos() {
         setLoadingTimes(false)
         return
       }
-      // Buscar duração do serviço
-      const service = services.find((s) => s.id === selectedService)
-      const duration = service ? service.duration_minutes : 30
-      // Gerar slots possíveis do dia
-      const diasSemana = ["domingo", "segunda", "terca", "quarta", "quinta", "sexta", "sabado"]
-      const diaSelecionado = diasSemana[selectedDate.getDay()]
-      const configDia = salonSchedule.find((d) => d.day === diaSelecionado)
-      if (!configDia || !configDia.active) {
+      
+      // Buscar barbershop_id
+      const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
+      let barbershopId = null
+      if (user) {
+        const { data: barbershop } = await supabase.from("barbershops").select("id").eq("owner_id", user.id).single()
+        if (barbershop) {
+          barbershopId = barbershop.id
+        }
+      }
+
+      if (!barbershopId) {
         setAvailableTimes([])
         setLoadingTimes(false)
         return
       }
-      const slots = generateTimeSlots(configDia.open, configDia.close)
-      // Buscar agendamentos do barbeiro para o dia
-      const year = newAppointmentDate.getUTCFullYear()
-      const month = String(newAppointmentDate.getUTCMonth() + 1).padStart(2, "0")
-      const day = String(newAppointmentDate.getUTCDate()).padStart(2, "0")
-      const startUTC = `${year}-${month}-${day}T00:00:00+00:00`
-      const nextDay = new Date(Date.UTC(year, Number(month) - 1, Number(day) + 1))
-      const nextYear = nextDay.getUTCFullYear()
-      const nextMonth = String(nextDay.getUTCMonth() + 1).padStart(2, "0")
-      const nextDayStr = String(nextDay.getUTCDate()).padStart(2, "0")
-      const endUTC = `${nextYear}-${nextMonth}-${nextDayStr}T00:00:00+00:00`
+
+      // Buscar duração do serviço
+      const service = services.find((s) => s.id === selectedService)
+      const duration = service ? service.duration_minutes : 30
+      
+      // Buscar configuração do dia da tabela salon_schedule
+      const diasSemana = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
+      const diaSelecionado = diasSemana[newAppointmentDate.getDay()]
+
+      const { data: scheduleData } = await supabase
+        .from("salon_schedule")
+        .select("open, close, active")
+        .eq("barbershop_id", barbershopId)
+        .eq("day", diaSelecionado)
+        .single()
+
+      if (!scheduleData || !scheduleData.active) {
+        setAvailableTimes([])
+        setLoadingTimes(false)
+        return
+      }
+
+      const slots = generateTimeSlots(scheduleData.open, scheduleData.close)
+
+      // Buscar agendamentos do barbeiro para o dia (corrigindo para UTC-3)
+      const year = newAppointmentDate.getFullYear()
+      const month = String(newAppointmentDate.getMonth() + 1).padStart(2, "0")
+      const day = String(newAppointmentDate.getDate()).padStart(2, "0")
+      const startUTC = `${year}-${month}-${day}T03:00:00+00:00` // 00:00 BRT = 03:00 UTC
+      const nextDay = new Date(newAppointmentDate.getTime() + 24 * 60 * 60 * 1000)
+      const nextYear = nextDay.getFullYear()
+      const nextMonth = String(nextDay.getMonth() + 1).padStart(2, "0")
+      const nextDayStr = String(nextDay.getDate()).padStart(2, "0")
+      const endUTC = `${nextYear}-${nextMonth}-${nextDayStr}T02:59:59+00:00`
       const { data: dayAppointments, error } = await supabase
         .from("appointments")
         .select("*")
@@ -123,6 +150,7 @@ export default function Agendamentos() {
         .gte("start_at", startUTC)
         .lt("start_at", endUTC)
         .in("status", ["confirmed", "pending"])
+
       if (error) {
         setAvailableTimes(slots)
         setLoadingTimes(false)
@@ -132,19 +160,44 @@ export default function Agendamentos() {
       const occupied: Set<string> = new Set()
       ;(dayAppointments || []).forEach((appt: any) => {
         const apptStart = new Date(appt.start_at)
-        const apptEnd = appt.end_at ? new Date(appt.end_at) : new Date(apptStart.getTime() + duration * 60000)
-        slots.forEach((slot) => {
-          // slot: 'HH:mm'. Usar timezone local (não UTC) para comparar corretamente
-          const [h, m] = slot.split(":")
-          // new Date(ano, mes, dia, hora, minuto) => local time
-          const slotDate = new Date(year, Number(month) - 1, Number(day), Number(h), Number(m))
-          if (slotDate >= apptStart && slotDate < apptEnd) {
-            occupied.add(slot)
-          }
-        })
+        
+        // Extrair hora e minuto diretamente (JavaScript já converte automaticamente para timezone local)
+        const apptHour = apptStart.getHours().toString().padStart(2, '0')
+        const apptMinute = apptStart.getMinutes().toString().padStart(2, '0')
+        const apptTimeSlot = `${apptHour}:${apptMinute}`
+        
+        // Marcar esse horário como ocupado
+        occupied.add(apptTimeSlot)
       })
-      // Filtrar slots disponíveis
-      const available = slots.filter((slot) => !occupied.has(slot))
+
+      // Filtrar slots disponíveis considerando duração do serviço
+      const available = slots.filter((slot) => {
+        if (occupied.has(slot)) return false
+        
+        const [slotHour, slotMin] = slot.split(":").map(Number)
+        const [closeHour, closeMin] = scheduleData.close.split(":").map(Number)
+        
+        // Calcular horário de fim do serviço
+        const slotEndTime = slotHour * 60 + slotMin + duration // em minutos
+        const closeTime = closeHour * 60 + closeMin // em minutos
+        
+        // Verificar se o serviço cabe no horário de funcionamento
+        if (slotEndTime > closeTime) return false
+        
+        // Verificar se há conflito com agendamentos existentes durante toda a duração do serviço
+        const slotStartTime = slotHour * 60 + slotMin
+        for (let time = slotStartTime; time < slotEndTime; time += 30) { // verificar a cada 30 min
+          const checkHour = Math.floor(time / 60).toString().padStart(2, '0')
+          const checkMin = (time % 60).toString().padStart(2, '0')
+          const checkSlot = `${checkHour}:${checkMin}`
+          
+          if (occupied.has(checkSlot)) {
+            return false // há conflito durante a duração do serviço
+          }
+        }
+        
+        return true
+      })
       setAvailableTimes(available)
       setLoadingTimes(false)
     }
@@ -277,7 +330,7 @@ export default function Agendamentos() {
           barber_id: selectedBarber,
           start_at,
           end_at,
-          status: "pending",
+          status: "confirmed",
           total_price,
           client_id: null,
           user_id: user_id,
