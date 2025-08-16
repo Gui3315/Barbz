@@ -56,6 +56,7 @@ import { salonSchedule, generateTimeSlots } from "@/config/salonSchedule"
 export default function Agendamentos() {
   const { toast } = useToast()
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
+  const [newAppointmentDate, setNewAppointmentDate] = useState<Date | undefined>(new Date())
   const [selectedBarber, setSelectedBarber] = useState<string | null>(null)
   const [selectedService, setSelectedService] = useState<string | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
@@ -85,10 +86,10 @@ export default function Agendamentos() {
   const [loadingTimes, setLoadingTimes] = useState(false)
   // Função para gerar horários disponíveis considerando agendamentos existentes
   useEffect(() => {
-    const fetchAvailableTimes = async () => {
-      setLoadingTimes(true)
-      setAvailableTimes([])
-      if (!selectedDate || !selectedBarber || !selectedService) {
+  const fetchAvailableTimes = async () => {
+    setLoadingTimes(true)
+    setAvailableTimes([])
+    if (!newAppointmentDate || !selectedBarber || !selectedService) {
         setLoadingTimes(false)
         return
       }
@@ -106,9 +107,9 @@ export default function Agendamentos() {
       }
       const slots = generateTimeSlots(configDia.open, configDia.close)
       // Buscar agendamentos do barbeiro para o dia
-      const year = selectedDate.getUTCFullYear()
-      const month = String(selectedDate.getUTCMonth() + 1).padStart(2, "0")
-      const day = String(selectedDate.getUTCDate()).padStart(2, "0")
+      const year = newAppointmentDate.getUTCFullYear()
+      const month = String(newAppointmentDate.getUTCMonth() + 1).padStart(2, "0")
+      const day = String(newAppointmentDate.getUTCDate()).padStart(2, "0")
       const startUTC = `${year}-${month}-${day}T00:00:00+00:00`
       const nextDay = new Date(Date.UTC(year, Number(month) - 1, Number(day) + 1))
       const nextYear = nextDay.getUTCFullYear()
@@ -148,7 +149,7 @@ export default function Agendamentos() {
       setLoadingTimes(false)
     }
     fetchAvailableTimes()
-  }, [selectedDate, selectedBarber, selectedService, services])
+  }, [newAppointmentDate, selectedBarber, selectedService, services])
 
   // Buscar dados do Supabase
 
@@ -227,10 +228,11 @@ export default function Agendamentos() {
     setSelectedTime(null)
     setClientName("")
     setClientPhone("")
+    setNewAppointmentDate(new Date())
   }
 
   const handleCreateAppointment = async () => {
-    if (!clientName.trim() || !clientPhone.trim() || !selectedBarber || !selectedService || !selectedTime || !selectedDate) {
+    if (!clientName.trim() || !clientPhone.trim() || !selectedBarber || !selectedService || !selectedTime || !newAppointmentDate) {
       toast({
         title: "Campos obrigatórios",
         description: "Preencha todos os campos obrigatórios.",
@@ -250,14 +252,14 @@ export default function Agendamentos() {
       return
     }
     // Montar start_at (data + hora escolhida) com offset UTC-3
-    const dateStr = format(selectedDate, "yyyy-MM-dd")
+    const dateStr = format(newAppointmentDate, "yyyy-MM-dd")
     const start_at = `${dateStr}T${selectedTime}:00-03:00`
     // Calcular end_at com base na duração do serviço
     const service = services.find((s) => s.id === selectedService)
     const duration = service ? service.duration_minutes : 30
     const total_price = service ? Number(service.price) : 0
     const [h, m] = selectedTime.split(":")
-    const endDate = new Date(selectedDate)
+    const endDate = new Date(newAppointmentDate)
     endDate.setHours(Number(h), Number(m) + duration, 0, 0)
     const end_at = format(endDate, "yyyy-MM-dd'T'HH:mm:ssXXX")
     // Buscar barbershop_id na tabela barbershops onde owner_id = user_id
@@ -471,8 +473,8 @@ export default function Agendamentos() {
                       <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm p-3">
                         <Calendar
                           mode="single"
-                          selected={selectedDate}
-                          onSelect={setSelectedDate}
+                          selected={newAppointmentDate}
+                          onSelect={setNewAppointmentDate}
                           className="rounded-md pointer-events-auto"
                           locale={ptBR}
                           disabled={{ before: new Date() }}
