@@ -5,6 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { registerSW } from 'virtual:pwa-register';
+import { useEffect } from 'react';
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import Landing from "./pages/Landing";
@@ -14,30 +16,46 @@ import Cliente from "./pages/Cliente";
 import Produtos from "./pages/Meuestabelecimento";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
+
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/agendamentos" element={<ProtectedRoute allowed="proprietario"><Agendamentos /></ProtectedRoute>} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/agendamentos" element={<Agendamentos />} />
-            <Route path="/Meuestabelecimento" element={<Produtos />} />
-            <Route path="/configuracoes" element={<Configuracoes />} />
-            <Route path="/cliente" element={<ProtectedRoute allowed="cliente"><Cliente /></ProtectedRoute>} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+const App = () => {
+  useEffect(() => {
+    const updateSW = registerSW({
+      onNeedRefresh() {
+        if (confirm('Nova versão do Barbz disponível! Recarregar agora?')) {
+          updateSW(true);
+        }
+      },
+      onOfflineReady() {
+        console.log('Barbz pronto para funcionar offline');
+      },
+    });
+  }, []);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/agendamentos" element={<ProtectedRoute allowed="proprietario"><Agendamentos /></ProtectedRoute>} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/agendamentos" element={<Agendamentos />} />
+              <Route path="/Meuestabelecimento" element={<Produtos />} />
+              <Route path="/configuracoes" element={<Configuracoes />} />
+              <Route path="/cliente" element={<ProtectedRoute allowed="cliente"><Cliente /></ProtectedRoute>} />
+              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

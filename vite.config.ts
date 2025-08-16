@@ -13,7 +13,26 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/api\./, // suas APIs
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 // 24h
+              }
+            }
+          }
+        ]
+      },
       manifest: {
         name: 'Barbz',
         short_name: 'Barbz',
@@ -39,10 +58,7 @@ export default defineConfig(({ mode }) => ({
             type: 'image/png',
           },
         ],
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
-      },
+      }
     }),
     mode === 'development' &&
     componentTagger(),
