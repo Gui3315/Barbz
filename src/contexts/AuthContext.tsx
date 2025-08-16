@@ -144,7 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
+      console.log("🔄 AuthContext useEffect - Iniciando");
     async function fetchUser() {
+          console.log("👤 fetchUser - Executando");
       setLoading(true);
       const { data, error } = await supabase.auth.getUser();
       const supaUser = data?.user;
@@ -185,7 +187,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     fetchUser();
     // Listen to auth changes
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    console.log("👂 Configurando listener de auth changes");
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("🔔 Auth state changed:", { event, hasSession: !!session });
       if (session?.user) {
         if (!bootstrappedRef.current) {
           await bootstrapAfterLogin(session.user);
@@ -214,92 +218,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => {
+      console.log("🧹 Limpando listener");
       listener?.subscription.unsubscribe();
     };
   }, []);
 
   const login = async (email: string, password: string) => {
-  console.log("🚀 Iniciando login para:", email);
+  console.log("🚀 LOGIN SIMPLES - Iniciando para:", email);
   setLoading(true);
   
   try {
-    console.log("📡 Chamando supabase.auth.signInWithPassword...");
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    console.log("📊 Resposta do signIn:", { 
-      hasUser: !!data?.user, 
-      userId: data?.user?.id,
-      error: error?.message 
-    });
+    console.log("📡 Chamando signInWithPassword...");
+    const result = await supabase.auth.signInWithPassword({ email, password });
+    console.log("📊 Resultado completo:", result);
     
-    if (error || !data.user) {
-      console.error("❌ Erro no signIn:", error);
+    const { data, error } = result;
+    console.log("📋 Data:", data);
+    console.log("❌ Error:", error);
+    
+    if (error) {
+      console.error("❌ Erro encontrado:", error);
       setUser(null);
       setLoading(false);
       throw error;
     }
-
-    console.log("✅ Login no Supabase OK, checando bootstrap...");
-
-    // Bootstrap e definição do tipo após login
-    if (!bootstrappedRef.current) {
-      console.log("🔧 Executando bootstrap...");
-      try {
-        await bootstrapAfterLogin(data.user);
-        console.log("✅ Bootstrap concluído");
-      } catch (bootstrapError) {
-        console.error("⚠️ Erro no bootstrap (mas continuando):", bootstrapError);
-      }
-      bootstrappedRef.current = true;
-    } else {
-      console.log("⏭️ Bootstrap já executado, pulando...");
-    }
-
-    console.log("🔍 Buscando perfil para userId:", data.user.id);
-    let { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("user_type")
-      .eq("id", data.user.id)
-      .maybeSingle();
-      
-    console.log("👤 Resultado da busca do perfil:", { profile, error: profileError });
     
-    if (!profile && !profileError) {
-      console.log("⏳ Perfil não encontrado, aguardando 300ms...");
-      await new Promise((r) => setTimeout(r, 300));
-      
-      const result = await supabase
-        .from("profiles")
-        .select("user_type")
-        .eq("id", data.user.id)
-        .maybeSingle();
-        
-      profile = result.data;
-      console.log("👤 Perfil após segunda tentativa:", profile);
-    }
-    
-    if (!profile) {
-      console.error("❌ Perfil não encontrado após tentativas");
+    if (!data.user) {
+      console.error("❌ Usuário não retornado");
       setUser(null);
       setLoading(false);
-      throw new Error("Perfil não encontrado");
+      throw new Error("Usuário não encontrado");
     }
     
-    const newUser: AuthUser = { 
-      id: data.user.id, 
-      email: data.user.email!, 
-      user_type: profile.user_type === "proprietario" ? "proprietario" : "cliente"
+    console.log("✅ Login OK, usuário:", data.user.id);
+    
+    // Criar usuário simples sem consultar profiles
+    const simpleUser: AuthUser = {
+      id: data.user.id,
+      email: data.user.email!,
+      user_type: "proprietario" // hardcoded para teste
     };
     
-    console.log("✅ Definindo usuário no estado:", newUser);
-    setUser(newUser);
-    console.log("✅ Finalizando login, setLoading(false)");
-    setLoading(false);
+    console.log("✅ Definindo usuário:", simpleUser);
+    setUser(simpleUser);
     
   } catch (error) {
-    console.error("❌ Erro geral no login:", error);
+    console.error("❌ ERRO GERAL:", error);
     setUser(null);
-    setLoading(false);
     throw error;
+  } finally {
+    console.log("🏁 Finalizando - setLoading(false)");
+    setLoading(false);
   }
 };
 
