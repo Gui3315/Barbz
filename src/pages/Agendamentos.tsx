@@ -14,6 +14,7 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import { useEffect, useState } from "react"
+import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
@@ -54,6 +55,8 @@ interface Service {
 import { salonSchedule, generateTimeSlots } from "@/config/salonSchedule"
 
 export default function Agendamentos() {
+  const user = useRequireAuth({ requiredUserType: 'proprietario' });
+  if (!user) return <div>Carregando...</div>;
   const { toast } = useToast()
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [newAppointmentDate, setNewAppointmentDate] = useState<Date | undefined>(new Date())

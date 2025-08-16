@@ -10,64 +10,73 @@ import { Logo } from "@/components/ui/logo"
 import { useNavigate } from "react-router-dom"
 import { Link } from "react-router-dom"
 
-  // Máscara de telefone (XX) XXXXX-XXXX
-  function formatPhone(value: string) {
-    const digits = value.replace(/\D/g, "");
-    let formatted = "";
-    if (digits.length > 0) formatted += "(" + digits.substring(0, 2);
-    if (digits.length > 2) formatted += ") " + digits.substring(2, 7);
-    if (digits.length > 7) formatted += "-" + digits.substring(7, 11);
-    return formatted;
-  }
+// Máscara de telefone (XX) XXXXX-XXXX
+function formatPhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  let formatted = "";
+  if (digits.length > 0) formatted += "(" + digits.substring(0, 2);
+  if (digits.length > 2) formatted += ") " + digits.substring(2, 7);
+  if (digits.length > 7) formatted += "-" + digits.substring(7, 11);
+  return formatted;
+}
 
-  // Função auxiliar para determinar a mensagem de erro do CNPJ
-  function getErrorMessage(cnpjInfo: any) {
-    if (cnpjInfo.descricao_situacao_cadastral !== "ATIVA") {
-      return `CNPJ inativo (Situação: ${cnpjInfo.descricao_situacao_cadastral})`;
-    }
-    const cnaesValidos = ["9602501", "9602-5/01", 96025, 9602501];
-    const cnaeString = String(cnpjInfo.cnae_fiscal);
-    const cnaeDescricao = String(cnpjInfo.cnae_fiscal_descricao || "").toLowerCase();
-    const cnaeValido = cnaesValidos.some(
-      (cnae) => cnaeString === String(cnae) || cnaeString.replace(/[^0-9]/g, "") === String(cnae).replace(/[^0-9]/g, "")
-    );
-    const palavrasChave = ["cabeleireiro", "manicure", "pedicure", "salão", "beleza", "estética"];
-    const descricaoValida = palavrasChave.some((palavra) => cnaeDescricao.includes(palavra));
-    if (!cnaeValido && !descricaoValida) {
-      return `CNPJ não é da área de beleza. CNAE: ${cnpjInfo.cnae_fiscal} - ${cnpjInfo.cnae_fiscal_descricao}`;
-    }
-    return "CNPJ inválido";
+// Máscara de CEP XXXXX-XXX
+function formatCEP(value: string) {
+  const digits = value.replace(/\D/g, "")
+  let formatted = ""
+  if (digits.length > 0) formatted += digits.substring(0, 5)
+  if (digits.length > 5) formatted += "-" + digits.substring(5, 8)
+  return formatted
+}
+
+// Função para aplicar máscara de CNPJ
+function formatCNPJ(value: string) {
+  const digits = value.replace(/\D/g, "")
+  let formatted = ""
+  if (digits.length > 0) formatted += digits.substring(0, 2)
+  if (digits.length > 2) formatted += "." + digits.substring(2, 5)
+  if (digits.length > 5) formatted += "." + digits.substring(5, 8)
+  if (digits.length > 8) formatted += "/" + digits.substring(8, 12)
+  if (digits.length > 12) formatted += "-" + digits.substring(12, 14)
+  return formatted
+}
+
+// Função auxiliar para determinar a mensagem de erro do CNPJ
+function getErrorMessage(cnpjInfo: any) {
+  if (cnpjInfo.descricao_situacao_cadastral !== "ATIVA") {
+    return `CNPJ inativo (Situação: ${cnpjInfo.descricao_situacao_cadastral})`;
   }
+  const cnaesValidos = ["9602501", "9602-5/01", 96025, 9602501];
+  const cnaeString = String(cnpjInfo.cnae_fiscal);
+  const cnaeDescricao = String(cnpjInfo.cnae_fiscal_descricao || "").toLowerCase();
+  const cnaeValido = cnaesValidos.some(
+    (cnae) => cnaeString === String(cnae) || cnaeString.replace(/[^0-9]/g, "") === String(cnae).replace(/[^0-9]/g, "")
+  );
+  const palavrasChave = ["cabeleireiro", "manicure", "pedicure", "salão", "beleza", "estética"];
+  const descricaoValida = palavrasChave.some((palavra) => cnaeDescricao.includes(palavra));
+  if (!cnaeValido && !descricaoValida) {
+    return `CNPJ não é da área de beleza. CNAE: ${cnpjInfo.cnae_fiscal} - ${cnpjInfo.cnae_fiscal_descricao}`;
+  }
+  return "CNPJ inválido";
+}
+
+// Validação forte de senha
+function isPasswordStrong(pw: string) {
+  return pw.length >= 6 && /[A-Z]/.test(pw) && /[a-z]/.test(pw) && /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw)
+}
 
 export default function Login() {
   const navigate = useNavigate();
-  const auth = useAuth();
-  const login = auth.login;
-  const user = auth.user;
-  const authLoading = auth.loading;
+  const { user, setUser } = useAuth();
 
-  // Redireciona quando user for carregado
-useEffect(() => {
-  console.log("🔍 Login.tsx - Estado atual:", { 
-    user: user ? { id: user.id, email: user.email, user_type: user.user_type } : null, 
-    authLoading 
-  });
-  
-  if (user && !authLoading) {
-    console.log("✅ Login.tsx - Condições atendidas para redirecionamento");
-    console.log("👤 User type:", user.user_type);
-    
-    const targetRoute = user.user_type === "proprietario" ? "/agendamentos" : "/cliente";
-    console.log("🚀 Login.tsx - Redirecionando para:", targetRoute);
-    navigate(targetRoute);
-  } else {
-    console.log("⏳ Login.tsx - Aguardando:", { 
-      hasUser: !!user, 
-      authLoading,
-      willRedirect: user && !authLoading 
-    });
-  }
-}, [user, authLoading, navigate]);
+  // Redireciona se já estiver logado
+  useEffect(() => {
+    if (user) {
+      console.log("✅ Usuário já logado, redirecionando:", user.user_type);
+      const targetRoute = user.user_type === "proprietario" ? "/agendamentos" : "/cliente";
+      navigate(targetRoute);
+    }
+  }, [user, navigate]);
 
   const [phone, setPhone] = useState("")
   const [businessName, setBusinessName] = useState("")
@@ -75,31 +84,10 @@ useEffect(() => {
   const [city, setCity] = useState("")
   const [state, setState] = useState("")
   const [cep, setCep] = useState("")
-  // Máscara de CEP XXXXX-XXX
-  function formatCEP(value: string) {
-    const digits = value.replace(/\D/g, "")
-    let formatted = ""
-    if (digits.length > 0) formatted += digits.substring(0, 5)
-    if (digits.length > 5) formatted += "-" + digits.substring(5, 8)
-    return formatted
-  }
   const [mode, setMode] = useState<"login" | "signup" | "reset" | "resend">("login")
   const [userType, setUserType] = useState<"cliente" | "proprietario">("cliente")
   const [cnpj, setCnpj] = useState("")
   const [showPassword, setShowPassword] = useState(false)
-
-  // Função para aplicar máscara de CNPJ
-  function formatCNPJ(value: string) {
-    const digits = value.replace(/\D/g, "")
-    let formatted = ""
-    if (digits.length > 0) formatted += digits.substring(0, 2)
-    if (digits.length > 2) formatted += "." + digits.substring(2, 5)
-    if (digits.length > 5) formatted += "." + digits.substring(5, 8)
-    if (digits.length > 8) formatted += "/" + digits.substring(8, 12)
-    if (digits.length > 12) formatted += "-" + digits.substring(12, 14)
-    return formatted
-  }
-  // Removido campo de código de validação do admin
   const [cnpjStatus, setCnpjStatus] = useState<"idle" | "validating" | "valid" | "invalid">("idle")
   const [cnpjInfo, setCnpjInfo] = useState<any>(null)
   const [email, setEmail] = useState("")
@@ -110,25 +98,75 @@ useEffect(() => {
   const [success, setSuccess] = useState<string | null>(null)
 
   const handleLogin = async (e: React.FormEvent) => {
-  e.preventDefault();
-  console.log("🎯 Login.tsx - Iniciando handleLogin");
-  setLoading(true);
-  setError(null);
-  setSuccess(null);
-  const emailNorm = email.trim().toLowerCase();
-  
-  try {
-    console.log("📧 Login.tsx - Chamando auth.login para:", emailNorm);
-    await login(emailNorm, password);
-    console.log("✅ Login.tsx - auth.login concluído");
-    // O redirecionamento será feito pelo useEffect
-  } catch (err: any) {
-    console.error("❌ Login.tsx - Erro no handleLogin:", err);
-    setError(err?.message || "Erro inesperado ao tentar login.");
-  } finally {
-    setLoading(false);
+    e.preventDefault();
+    console.log("🎯 Iniciando login para:", email);
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    
+    const emailNorm = email.trim().toLowerCase();
+    
+    try {
+      // 1. Faz login no Supabase
+      console.log("📡 Fazendo login no Supabase...");
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailNorm,
+        password
+      });
+      
+      if (error) {
+        console.error("❌ Erro no login:", error);
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      if (!data.user) {
+        setError("Erro inesperado - usuário não encontrado");
+        setLoading(false);
+        return;
+      }
+
+      console.log("✅ Login realizado, buscando perfil...");
+
+      // 2. Busca o perfil do usuário para pegar o user_type
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_type")
+        .eq("id", data.user.id)
+        .single();
+
+      if (profileError || !profile) {
+        console.error("❌ Erro ao buscar perfil:", profileError);
+        setError("Perfil não encontrado. Entre em contato com o suporte.");
+        setLoading(false);
+        return;
+      }
+
+      console.log("👤 Perfil encontrado:", profile);
+
+      // 3. Cria objeto do usuário
+      const authUser = {
+        id: data.user.id,
+        email: data.user.email!,
+        user_type: profile.user_type as "proprietario" | "cliente"
+      };
+
+      // 4. Salva no context (que vai salvar no localStorage automaticamente)
+      setUser(authUser);
+
+      // 5. Redireciona baseado no tipo
+      const targetRoute = profile.user_type === "proprietario" ? "/agendamentos" : "/cliente";
+      console.log("🚀 Redirecionando para:", targetRoute);
+      navigate(targetRoute);
+
+    } catch (err: any) {
+      console.error("❌ Erro inesperado no login:", err);
+      setError(err?.message || "Erro inesperado ao tentar login.");
+    } finally {
+      setLoading(false);
+    }
   }
-}
 
   // Validação de CNPJ via BrasilAPI
   const validarCNPJ = async (cnpj: string) => {
@@ -159,11 +197,6 @@ useEffect(() => {
     }
   }
 
-  // Validação forte de senha
-  function isPasswordStrong(pw: string) {
-    return pw.length >= 6 && /[A-Z]/.test(pw) && /[a-z]/.test(pw) && /[0-9]/.test(pw) && /[^A-Za-z0-9]/.test(pw)
-  }
-
   // Cadastro
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -188,9 +221,7 @@ useEffect(() => {
       setLoading(false)
       return
     }
-    if (userType === "cliente") {
-      // Removido: validação de barbearia para cliente
-    }
+
     if (userType === "proprietario") {
       // Valida CNPJ antes de cadastrar (BrasilAPI)
       const cnpjValido = await validarCNPJ(cnpj)
@@ -288,7 +319,6 @@ useEffect(() => {
           state: userType === "proprietario" ? state : "",
           cep: userType === "proprietario" ? cep : "",
           status: "ativo",
-          // não enviar barbershop_id no metadata do cliente
         },
         emailRedirectTo: window.location.origin + "/",
       },
@@ -509,14 +539,7 @@ useEffect(() => {
                   type="text"
                   placeholder="(XX) XXXXX-XXXX"
                   value={phone}
-                  onChange={e => setPhone(((val: string) => {
-                    const digits = val.replace(/\D/g, "");
-                    let formatted = "";
-                    if (digits.length > 0) formatted += "(" + digits.substring(0, 2);
-                    if (digits.length > 2) formatted += ") " + digits.substring(2, 7);
-                    if (digits.length > 7) formatted += "-" + digits.substring(7, 11);
-                    return formatted;
-                  })(e.target.value))}
+                  onChange={e => setPhone(formatPhone(e.target.value))}
                   maxLength={15}
                   required
                   className="h-12 border-slate-200 focus:border-blue-500 focus:ring-blue-500/20 rounded-lg"

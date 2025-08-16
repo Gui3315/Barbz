@@ -9,8 +9,11 @@ import { ClientLayout } from "@/components/client/layout"
 import ClientBooking from "@/components/client/booking"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar, User, LogOut, Camera, Save } from "lucide-react"
+import { useRequireAuth } from '@/hooks/useRequireAuth'
 
 export default function Cliente() {
+  const user = useRequireAuth({ requiredUserType: 'cliente' });
+  if (!user) return <div>Carregando...</div>;
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState("agendamento")
