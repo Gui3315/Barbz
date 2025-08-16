@@ -48,17 +48,24 @@ export default function Login() {
 
   // Redireciona quando user for carregado
 useEffect(() => {
+  console.log("🔍 Login.tsx - Estado atual:", { 
+    user: user ? { id: user.id, email: user.email, user_type: user.user_type } : null, 
+    authLoading 
+  });
+  
   if (user && !authLoading) {
-    // Busca o tipo do usuário e redireciona
-    supabase
-      .from("profiles")
-      .select("user_type")
-      .eq("id", user.id)
-      .single()
-      .then(({ data: profileData }) => {
-        const targetRoute = profileData?.user_type === "proprietario" ? "/agendamentos" : "/cliente";
-        navigate(targetRoute);
-      });
+    console.log("✅ Login.tsx - Condições atendidas para redirecionamento");
+    console.log("👤 User type:", user.user_type);
+    
+    const targetRoute = user.user_type === "proprietario" ? "/agendamentos" : "/cliente";
+    console.log("🚀 Login.tsx - Redirecionando para:", targetRoute);
+    navigate(targetRoute);
+  } else {
+    console.log("⏳ Login.tsx - Aguardando:", { 
+      hasUser: !!user, 
+      authLoading,
+      willRedirect: user && !authLoading 
+    });
   }
 }, [user, authLoading, navigate]);
 
@@ -102,22 +109,26 @@ useEffect(() => {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  // Login
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-    const emailNorm = email.trim().toLowerCase();
-    try {
-      await login(emailNorm, password);
-      // O redirecionamento será feito pelo useEffect
-    } catch (err: any) {
-      setError(err?.message || "Erro inesperado ao tentar login.");
-    } finally {
-      setLoading(false);
-    }
+  e.preventDefault();
+  console.log("🎯 Login.tsx - Iniciando handleLogin");
+  setLoading(true);
+  setError(null);
+  setSuccess(null);
+  const emailNorm = email.trim().toLowerCase();
+  
+  try {
+    console.log("📧 Login.tsx - Chamando auth.login para:", emailNorm);
+    await login(emailNorm, password);
+    console.log("✅ Login.tsx - auth.login concluído");
+    // O redirecionamento será feito pelo useEffect
+  } catch (err: any) {
+    console.error("❌ Login.tsx - Erro no handleLogin:", err);
+    setError(err?.message || "Erro inesperado ao tentar login.");
+  } finally {
+    setLoading(false);
   }
+}
 
   // Validação de CNPJ via BrasilAPI
   const validarCNPJ = async (cnpj: string) => {

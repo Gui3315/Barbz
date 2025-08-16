@@ -219,16 +219,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    setLoading(true);
+  console.log("🚀 Iniciando login para:", email);
+  setLoading(true);
+  
+  try {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    console.log("📊 Resposta do signIn:", { data, error });
+    
     if (error || !data.user) {
-      setUser(null);
-      setLoading(false);
+      console.error("❌ Erro no signIn:", error);
       throw error;
     }
 
+    console.log("✅ Login no Supabase OK, buscando perfil...");
+
     // Bootstrap e definição do tipo após login
     if (!bootstrappedRef.current) {
+      console.log("🔧 Executando bootstrap...");
       await bootstrapAfterLogin(data.user);
       bootstrappedRef.current = true;
     }
@@ -238,23 +245,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select("user_type")
       .eq("id", data.user.id)
       .maybeSingle();
+      
+    console.log("👤 Perfil encontrado:", profile);
+    
     if (!profile) {
+      console.log("⏳ Perfil não encontrado, aguardando...");
       await new Promise((r) => setTimeout(r, 300));
       ({ data: profile } = await supabase
         .from("profiles")
         .select("user_type")
         .eq("id", data.user.id)
         .maybeSingle());
+      console.log("👤 Perfil após espera:", profile);
     }
+    
     if (!profile) {
+      console.error("❌ Perfil não encontrado após tentativas");
       setUser(null);
       setLoading(false);
       throw new Error("Perfil não encontrado");
     }
-    const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
-    setUser({ id: data.user.id, email: data.user.email!, user_type: userType });
+    
+    const userType: "proprietario" | "cliente" = profile.user_type === "proprietario" ? "proprietario" : "cliente";
+const newUser: AuthUser = { 
+  id: data.user.id, 
+  email: data.user.email!, 
+  user_type: userType 
+};
+    
+    console.log("✅ Definindo usuário:", newUser);
+    setUser(newUser);
     setLoading(false);
-  };
+    
+  } catch (error) {
+    console.error("❌ Erro no login:", error);
+    setUser(null);
+    setLoading(false);
+    throw error;
+  }
+};
 
   const logout = async () => {
     await supabase.auth.signOut();
