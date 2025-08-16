@@ -42,6 +42,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     console.log("🚀 Iniciando bootstrap para:", supaUser.id);
+    console.log("📋 User metadata:", supaUser.user_metadata);
+    
+    // TEMPORÁRIO: Pular bootstrap para não travar
+    console.log("⚠️ PULANDO BOOTSTRAP TEMPORARIAMENTE");
+    bootstrappedRef.current.add(supaUser.id);
+    return;
+    
+    // TODO: Resolver problema no bootstrap abaixo
     bootstrappedRef.current.add(supaUser.id);
     
     const md = (supaUser.user_metadata || {}) as any;
@@ -159,7 +167,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log("👤 Processando usuário autenticado:", supaUser.id);
     
     try {
-      // Bootstrap se necessário
+      // Bootstrap se necessário (agora vai ser pulado)
       console.log("🔧 Executando bootstrap...");
       await bootstrapAfterLogin(supaUser);
       console.log("✅ Bootstrap concluído, buscando perfil...");
