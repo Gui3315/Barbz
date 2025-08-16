@@ -160,23 +160,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     try {
       // Bootstrap se necessário
+      console.log("🔧 Executando bootstrap...");
       await bootstrapAfterLogin(supaUser);
+      console.log("✅ Bootstrap concluído, buscando perfil...");
       
       // Busca perfil com retry
-      let { data: profile } = await supabase
+      console.log("🔍 Primeira busca do perfil...");
+      let { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("user_type")
         .eq("id", supaUser.id)
         .maybeSingle();
         
+      console.log("📊 Resultado primeira busca:", { hasProfile: !!profile, error: profileError?.message });
+        
       if (!profile) {
-        console.log("⏳ Perfil não encontrado, aguardando...");
+        console.log("⏳ Perfil não encontrado, aguardando 500ms...");
         await new Promise((r) => setTimeout(r, 500));
-        ({ data: profile } = await supabase
+        
+        console.log("🔍 Segunda busca do perfil...");
+        ({ data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("user_type")
           .eq("id", supaUser.id)
           .maybeSingle());
+          
+        console.log("📊 Resultado segunda busca:", { hasProfile: !!profile, error: profileError?.message });
       }
       
       if (!profile) {
@@ -187,7 +196,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       
       const userType = profile.user_type === "proprietario" ? "proprietario" : "cliente";
-      console.log("✅ Definindo usuário:", { id: supaUser.id, userType });
+      console.log("✅ Definindo usuário:", { id: supaUser.id, userType, email: supaUser.email });
       
       setUser({ 
         id: supaUser.id, 
@@ -195,11 +204,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user_type: userType 
       });
       
+      console.log("🎉 Usuário definido com sucesso!");
+      
     } catch (error) {
       console.error("❌ Erro ao processar usuário:", error);
       setUser(null);
     }
     
+    console.log("🏁 Finalizando processamento - setLoading(false)");
     setLoading(false);
   };
 
