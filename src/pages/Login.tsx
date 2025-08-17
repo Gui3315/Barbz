@@ -191,109 +191,104 @@ export default function Login() {
   }
 
   // Cadastro
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError(null)
-    setSuccess(null)
+const handleSignup = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setLoading(true)
+  setError(null)
+  setSuccess(null)
 
-    const emailNorm = email.trim().toLowerCase()
+  const emailNorm = email.trim().toLowerCase()
 
-    // Validação do telefone
-    const phoneDigits = phone.replace(/\D/g, "")
-    if (phoneDigits.length !== 11) {
-      setError("Informe um telefone válido no formato (XX) XXXXX-XXXX")
+  // Validação do telefone
+  const phoneDigits = phone.replace(/\D/g, "")
+  if (phoneDigits.length !== 11) {
+    setError("Informe um telefone válido no formato (XX) XXXXX-XXXX")
+    setLoading(false)
+    return
+  }
+  
+  // Validação forte de senha
+  if (!isPasswordStrong(password)) {
+    setError(
+      "A senha deve ter no mínimo 6 caracteres, 1 letra maiúscula, 1 minúscula, 1 número e 1 caractere especial.",
+    )
+    setLoading(false)
+    return
+  }
+
+  if (userType === "proprietario") {
+    // Valida CNPJ antes de cadastrar (BrasilAPI)
+    const cnpjValido = await validarCNPJ(cnpj)
+    if (!cnpjValido) {
+      setError("CNPJ inválido ou inativo")
       setLoading(false)
       return
     }
-    // Validação forte de senha
-    if (!isPasswordStrong(password)) {
-      setError(
-        "A senha deve ter no mínimo 6 caracteres, 1 letra maiúscula, 1 minúscula, 1 número e 1 caractere especial.",
-      )
+    
+    // Valida atividade econômica principal (CNAE)
+    const cnaePrincipal = String(cnpjInfo?.cnae_fiscal)
+    const cnaeDescricao = String(cnpjInfo?.cnae_fiscal_descricao).toLowerCase()
+    const cnaeAceito = cnaePrincipal === "9602501"
+    const descricaoAceita = cnaeDescricao.trim() === "cabeleireiros, manicure e pedicure"
+    if (!cnaeAceito && !descricaoAceita) {
+      setError("O CNPJ informado não é de cabeleireiro, manicure ou pedicure (CNAE 9602501)")
       setLoading(false)
       return
     }
 
-    if (userType === "proprietario") {
-      // Valida CNPJ antes de cadastrar (BrasilAPI)
-      const cnpjValido = await validarCNPJ(cnpj)
-      if (!cnpjValido) {
-        setError("CNPJ inválido ou inativo")
-        setLoading(false)
-        return
-      }
-      // Valida atividade econômica principal (CNAE)
-      const cnaePrincipal = String(cnpjInfo?.cnae_fiscal)
-      const cnaeDescricao = String(cnpjInfo?.cnae_fiscal_descricao).toLowerCase()
-      const cnaeAceito = cnaePrincipal === "9602501"
-      const descricaoAceita = cnaeDescricao.trim() === "cabeleireiros, manicure e pedicure"
-      if (!cnaeAceito && !descricaoAceita) {
-        setError("O CNPJ informado não é de cabeleireiro, manicure ou pedicure (CNAE 9602501)")
-        setLoading(false)
-        return
-      }
-      if (!businessName.trim()) {
-        setError("Informe o nome do salão")
-        setLoading(false)
-        return
-      }
-      if (!address.trim()) {
-        setError("Informe o endereço do salão")
-        setLoading(false)
-        return
-      }
-      if (!city.trim()) {
-        setError("Informe a cidade")
-        setLoading(false)
-        return
-      }
-      if (!state.trim()) {
-        setError("Informe o estado")
-        setLoading(false)
-        return
-      }
-      if (!cep.trim()) {
-        setError("Informe o CEP")
-        setLoading(false)
-        return
-      }
-      if (!cnpj.trim()) {
-        setError("Informe o CNPJ")
+    // Validações de campos obrigatórios para proprietário
+    const camposObrigatorios = [
+      { valor: businessName.trim(), nome: "nome do salão" },
+      { valor: address.trim(), nome: "endereço do salão" },
+      { valor: city.trim(), nome: "cidade" },
+      { valor: state.trim(), nome: "estado" },
+      { valor: cep.trim(), nome: "CEP" },
+      { valor: cnpj.trim(), nome: "CNPJ" }
+    ]
+
+    for (const campo of camposObrigatorios) {
+      if (!campo.valor) {
+        setError(`Informe o ${campo.nome}`)
         setLoading(false)
         return
       }
     }
+  }
 
-    // Validação: impedir cadastro com e-mail já existente (profiles pode já ter sido criado)
+  try {
+    // Validação: impedir cadastro com e-mail já existente
     const { data: existingEmailProfile, error: emailCheckError } = await supabase
       .from("profiles")
       .select("id")
       .ilike("email", emailNorm)
       .maybeSingle()
+      
     if (emailCheckError) {
       setError("Erro ao verificar e-mail existente: " + emailCheckError.message)
       setLoading(false)
       return
     }
+    
     if (existingEmailProfile) {
       setError("Já existe um cadastro com este e-mail. Faça login ou recupere sua senha.")
       setLoading(false)
       return
     }
 
-    // Validação: impedir cadastro com CNPJ já existente (relação 1:1 por CNPJ em profiles)
+    // Validação: impedir cadastro com CNPJ já existente para proprietários
     if (userType === "proprietario") {
       const { data: existingCnpjProfile, error: cnpjProfileError } = await supabase
         .from("profiles")
         .select("id")
         .eq("cnpj", cnpj)
         .maybeSingle()
+        
       if (cnpjProfileError) {
         setError("Erro ao verificar CNPJ existente: " + cnpjProfileError.message)
         setLoading(false)
         return
       }
+      
       if (existingCnpjProfile) {
         setError("Já existe um cadastro de proprietário com este CNPJ.")
         setLoading(false)
@@ -301,97 +296,68 @@ export default function Login() {
       }
     }
 
-    // Cadastro do usuário
-    const { data: signUpData, error } = await supabase.auth.signUp({
+    // 1. Cadastrar usuário no Auth
+    console.log("🔄 Iniciando cadastro no Supabase Auth...")
+    const { data: signUpData, error: authError } = await supabase.auth.signUp({
       email: emailNorm,
       password,
       options: {
-        data: {
-          user_name: name,
-          user_type: userType === "proprietario" ? "proprietario" : userType,
-        },
         emailRedirectTo: window.location.origin + "/",
       },
     })
 
-    if (error) {
-      setError(error.message)
+    if (authError) {
+      console.error("❌ Erro no Auth:", authError)
+      setError(authError.message)
       setLoading(false)
       return
     }
 
-    // Insert manual na tabela profiles para garantir que todos os campos sejam salvos
-    if (signUpData?.user?.id) {
-      console.log("📝 Dados que serão inseridos no profile:", {
-        id: signUpData.user.id,
-        user_name: name,
-        user_type: userType === "proprietario" ? "proprietario" : userType,
-        phone: phone,
-        cnpj: userType === "proprietario" ? cnpj : null,
-        business_name: userType === "proprietario" ? businessName : null,
-        address: userType === "proprietario" ? address : null,
-        city: userType === "proprietario" ? city : null,
-        state: userType === "proprietario" ? state : null,
-        cep: userType === "proprietario" ? cep : null,
-        email: emailNorm
-      });
-
-      const { error: profileError } = await supabase.from("profiles").insert({
-        id: signUpData.user.id,
-        user_name: name,
-        user_type: userType === "proprietario" ? "proprietario" : userType,
-        phone: phone,
-        cnpj: userType === "proprietario" ? cnpj : null,
-        business_name: userType === "proprietario" ? businessName : null,
-        address: userType === "proprietario" ? address : null,
-        city: userType === "proprietario" ? city : null,
-        state: userType === "proprietario" ? state : null,
-        cep: userType === "proprietario" ? cep : null,
-        email: emailNorm
-      });
-
-      if (profileError) {
-        console.error("❌ Erro ao criar perfil:", profileError);
-        setError("Erro ao salvar dados do perfil: " + profileError.message);
-        setLoading(false);
-        return;
-      }
+    if (!signUpData?.user?.id) {
+      setError("Erro inesperado durante o cadastro")
+      setLoading(false)
+      return
     }
 
-    let barbershopId: string | null = null;
+    console.log("✅ Usuário criado no Auth:", signUpData.user.id)
 
-    if (userType === "proprietario" && signUpData?.user?.id) {
-      // Cria a barbearia e pega o id dela
-      const { data: barbershopData, error: barbershopError } = await supabase
-        .from("barbershops")
-        .insert({
-          name: businessName,
-          owner_id: signUpData.user.id,
-        })
-        .select()
-        .single();
+    // 2. Completar cadastro usando RPC
+    console.log("🔄 Completando cadastro com RPC...")
+    const { data: rpcResult, error: rpcError } = await supabase
+      .rpc('complete_user_signup' as any, {
+        p_user_id: signUpData.user.id,
+        p_user_name: name,
+        p_user_type: userType,
+        p_phone: phone,
+        p_email: emailNorm,
+        p_cnpj: userType === "proprietario" ? cnpj : null,
+        p_business_name: userType === "proprietario" ? businessName : null,
+        p_address: userType === "proprietario" ? address : null,
+        p_city: userType === "proprietario" ? city : null,
+        p_state: userType === "proprietario" ? state : null,
+        p_cep: userType === "proprietario" ? cep : null
+      })
 
-      if (barbershopError) {
-        setError("Erro ao criar barbearia: " + barbershopError.message);
-        setLoading(false);
-        return;
-      }
-
-      barbershopId = barbershopData?.id;
+    if (rpcError) {
+      console.error("❌ Erro no RPC:", rpcError)
+      setError(`Erro ao completar cadastro: ${rpcError.message}`)
+      setLoading(false)
+      return
     }
 
-    if (userType === "proprietario" && barbershopId) {
-      for (const dia of salonSchedule) {
-        await supabase.from("salon_schedule").insert({
-          barbershop_id: barbershopId,
-          day: dia.day,
-          open: dia.open,
-          close: dia.close,
-          active: dia.active,
-        });
-      }
+    // Definir tipo para o resultado RPC
+    const result = rpcResult as { success: boolean; error?: string; barbershop_id?: string; message?: string }
+
+    if (!result?.success) {
+      console.error("❌ RPC retornou erro:", result)
+      setError(`Erro: ${result?.error || 'Erro desconhecido no cadastro'}`)
+      setLoading(false)
+      return
     }
 
+    console.log("✅ Cadastro completo realizado via RPC:", rpcResult)
+
+    // Sucesso - limpar formulário
     setSuccess("Cadastro realizado! Verifique seu email para confirmar.")
     setMode("login")
     setEmail("")
@@ -406,8 +372,14 @@ export default function Login() {
     setCep("")
     setCnpjStatus("idle")
     setCnpjInfo(null)
+
+  } catch (err: any) {
+    console.error("❌ Erro inesperado no cadastro:", err)
+    setError(err?.message || "Erro inesperado durante o cadastro.")
+  } finally {
     setLoading(false)
   }
+}
 
   // Recuperação de senha
   const handleReset = async (e: React.FormEvent) => {
