@@ -289,13 +289,13 @@ export default function MeuEstabelecimento() {
 
   // Horários e dias de funcionamento
   const weekDays = [
-    { key: "Segunda", label: "Segunda" },
-    { key: "Terça", label: "Terça" },
-    { key: "Quarta", label: "Quarta" },
-    { key: "Quinta", label: "Quinta" },
-    { key: "Sexta", label: "Sexta" },
-    { key: "Sábado", label: "Sábado" },
-    { key: "Domingo", label: "Domingo" },
+    { key: "monday", label: "Segunda" },
+    { key: "tuesday", label: "Terça" },
+    { key: "wednesday", label: "Quarta" },
+    { key: "thursday", label: "Quinta" },
+    { key: "friday", label: "Sexta" },
+    { key: "saturday", label: "Sábado" },
+    { key: "sunday", label: "Domingo" },
   ]
   const [schedule, setSchedule] = useState<any>({})
   const [loadingSchedule, setLoadingSchedule] = useState(true)
