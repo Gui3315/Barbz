@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Logo } from "@/components/ui/logo"
 import { useNavigate } from "react-router-dom"
 import { Link } from "react-router-dom"
+import { salonSchedule } from "@/config/salonSchedule"
 
 // Máscara de telefone (XX) XXXXX-XXXX
 function formatPhone(value: string) {
@@ -257,6 +258,11 @@ export default function Login() {
         setLoading(false)
         return
       }
+      if (!cnpj.trim()) {
+        setError("Informe o CNPJ")
+        setLoading(false)
+        return
+      }
     }
 
     // Validação: impedir cadastro com e-mail já existente (profiles pode já ter sido criado)
@@ -303,22 +309,87 @@ export default function Login() {
         data: {
           user_name: name,
           user_type: userType === "proprietario" ? "proprietario" : userType,
-          phone: phone,
-          cnpj: userType === "proprietario" ? cnpj : "",
-          business_name: userType === "proprietario" ? businessName : "",
-          address: userType === "proprietario" ? address : "",
-          city: userType === "proprietario" ? city : "",
-          state: userType === "proprietario" ? state : "",
-          cep: userType === "proprietario" ? cep : "",
-          status: "ativo",
         },
         emailRedirectTo: window.location.origin + "/",
       },
     })
+
     if (error) {
       setError(error.message)
       setLoading(false)
       return
+    }
+
+    // Insert manual na tabela profiles para garantir que todos os campos sejam salvos
+    if (signUpData?.user?.id) {
+      console.log("📝 Dados que serão inseridos no profile:", {
+        id: signUpData.user.id,
+        user_name: name,
+        user_type: userType === "proprietario" ? "proprietario" : userType,
+        phone: phone,
+        cnpj: userType === "proprietario" ? cnpj : null,
+        business_name: userType === "proprietario" ? businessName : null,
+        address: userType === "proprietario" ? address : null,
+        city: userType === "proprietario" ? city : null,
+        state: userType === "proprietario" ? state : null,
+        cep: userType === "proprietario" ? cep : null,
+        email: emailNorm
+      });
+
+      const { error: profileError } = await supabase.from("profiles").insert({
+        id: signUpData.user.id,
+        user_name: name,
+        user_type: userType === "proprietario" ? "proprietario" : userType,
+        phone: phone,
+        cnpj: userType === "proprietario" ? cnpj : null,
+        business_name: userType === "proprietario" ? businessName : null,
+        address: userType === "proprietario" ? address : null,
+        city: userType === "proprietario" ? city : null,
+        state: userType === "proprietario" ? state : null,
+        cep: userType === "proprietario" ? cep : null,
+        email: emailNorm
+      });
+
+      if (profileError) {
+        console.error("❌ Erro ao criar perfil:", profileError);
+        setError("Erro ao salvar dados do perfil: " + profileError.message);
+        setLoading(false);
+        return;
+      }
+    }
+
+    let barbershopId: string | null = null;
+
+    if (userType === "proprietario" && signUpData?.user?.id) {
+      // Cria a barbearia e pega o id dela
+      const { data: barbershopData, error: barbershopError } = await supabase
+        .from("barbershops")
+        .insert({
+          name: businessName,
+          owner_id: signUpData.user.id,
+        })
+        .select()
+        .single();
+
+      if (barbershopError) {
+        setError("Erro ao criar barbearia: " + barbershopError.message);
+        setLoading(false);
+        return;
+      }
+
+      barbershopId = barbershopData?.id;
+    }
+
+    if (userType === "proprietario" && barbershopId) {
+      for (const dia of salonSchedule) {
+        await supabase.from("salon_schedule").insert({
+          barbershop_id: barbershopId,
+          day: dia.day,
+          open: dia.open,
+          close: dia.close,
+          active: dia.active,
+        });
+      }
     }
 
     setSuccess("Cadastro realizado! Verifique seu email para confirmar.")

@@ -5,25 +5,337 @@ import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Link } from "react-router-dom"
+import { getAvailableTimeSlots, getAvailableBarbersForSlot } from "@/utils/availabilityUtils"
 import { ClientLayout } from "@/components/client/layout"
-import ClientBooking from "@/components/client/booking"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, User, LogOut, Camera, Save } from "lucide-react"
-import { useRequireAuth } from '@/hooks/useRequireAuth'
+import { Calendar, User, LogOut, Camera, Save, Clock, Scissors, MapPin, CheckCircle } from "lucide-react"
+
+// Função para gerar slots de horário baseado no horário de abertura e fechamento
+function generateTimeSlots(openTime: string, closeTime: string, intervalMinutes = 30): string[] {
+  const slots: string[] = []
+
+  // Converter horários para minutos
+  const [openHour, openMin] = openTime.split(":").map(Number)
+  const [closeHour, closeMin] = closeTime.split(":").map(Number)
+
+  const openMinutes = openHour * 60 + openMin
+  const closeMinutes = closeHour * 60 + closeMin
+
+  // Gerar slots de intervalMinutes em intervalMinutes
+  for (let minutes = openMinutes; minutes < closeMinutes; minutes += intervalMinutes) {
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+
+    const timeString = `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`
+    slots.push(timeString)
+  }
+
+  return slots
+}
+
+// Função utilitária para criar datas no fuso correto
+const createLocalDateTime = (date, time) => {
+  // Criar data no formato ISO local sem conversão de fuso
+  const dateTimeString = `${date}T${time}:00.000`;
+  return new Date(dateTimeString);
+};
 
 export default function Cliente() {
-  const user = useRequireAuth({ requiredUserType: 'cliente' });
-  if (!user) return <div>Carregando...</div>;
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState("agendamento")
   const [clientData, setClientData] = useState<any>(null)
   const [profileData, setProfileData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  
   // Campos editáveis do perfil do cliente
   const [clientName, setClientName] = useState("")
   const [clientEmail, setClientEmail] = useState("")
   const [clientPhone, setClientPhone] = useState("")
+
+  // Estado para agendamento
+  const [bookingStep, setBookingStep] = useState("barbershop") // barbershop -> method -> service/barber -> date -> time -> confirm
+  const [bookingMethod, setBookingMethod] = useState("") // "by-time" ou "by-barber"
+  const [selectedBarbershop, setSelectedBarbershop] = useState<any>(null)
+  const [selectedService, setSelectedService] = useState<any>(null)
+  const [selectedBarber, setSelectedBarber] = useState<any>(null)
+  const [selectedDate, setSelectedDate] = useState("")
+  const [selectedTime, setSelectedTime] = useState("")
+  
+  // Dados para as opções
+  const [barbershops, setBarbershops] = useState<any[]>([])
+  const [services, setServices] = useState<any[]>([])
+  const [barbers, setBarbers] = useState<any[]>([])
+  const [availableSlots, setAvailableSlots] = useState<string[]>([])
+  const [availableBarbers, setAvailableBarbers] = useState<any[]>([])
+  const [bookingLoading, setBookingLoading] = useState(false)
+
+  // Buscar barbearias
+  const fetchBarbershops = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("barbershops")
+        .select("id, name")
+        .order("name")
+      
+      if (error) throw error
+      setBarbershops(data || [])
+    } catch (error) {
+      console.error("Erro ao buscar barbearias:", error)
+    }
+  }
+
+  // Buscar serviços de uma barbearia
+  const fetchServices = async (barbershopId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("services")
+        .select("*")
+        .eq("barbershop_id", barbershopId)
+        .eq("is_active", true)
+        .order("name")
+      
+      if (error) throw error
+      setServices(data || [])
+    } catch (error) {
+      console.error("Erro ao buscar serviços:", error)
+    }
+  }
+
+  // Buscar barbeiros de uma barbearia
+  const fetchBarbers = async (barbershopId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("barbers")
+        .select("*")
+        .eq("barbershop_id", barbershopId)
+        .eq("is_active", true)
+        .order("name")
+      
+      if (error) throw error
+      setBarbers(data || [])
+    } catch (error) {
+      console.error("Erro ao buscar barbeiros:", error)
+    }
+  }
+
+  // Substitua a função fetchAvailableSlots por esta versão corrigida:
+const fetchAvailableSlots = async (serviceId: string, date: string) => {
+  if (!selectedBarbershop || !serviceId || !date) return
+  
+  try {
+    setBookingLoading(true)
+    
+    // Se estamos agendando por barbeiro, usar o barbeiro selecionado
+    if (bookingMethod === "by-barber" && selectedBarber) {
+      const slots = await getAvailableTimeSlots(selectedBarber.id, serviceId, date, selectedBarbershop.id)
+      setAvailableSlots(slots)
+    } else if (bookingMethod === "by-time") {
+      // Para agendamento por horário, vamos buscar todos os slots possíveis
+      // considerando TODOS os barbeiros
+      
+      const allSlotsSet = new Set<string>()
+      
+      // Buscar slots de todos os barbeiros ativos
+      for (const barber of barbers.filter(b => b.is_active)) {
+        const barberSlots = await getAvailableTimeSlots(barber.id, serviceId, date, selectedBarbershop.id)
+        barberSlots.forEach(slot => allSlotsSet.add(slot))
+      }
+      
+      const allSlots = Array.from(allSlotsSet).sort()
+      setAvailableSlots(allSlots)
+    }
+    
+  } catch (error) {
+    console.error("Erro ao buscar horários:", error)
+    setAvailableSlots([])
+  } finally {
+    setBookingLoading(false)
+  }
+}
+
+  // Substitua a função fetchAvailableBarbers por esta versão corrigida:
+const fetchAvailableBarbers = async (timeSlot: string) => {
+  if (!selectedBarbershop || !selectedDate || !selectedService) return
+  
+  try {
+    setBookingLoading(true)
+    
+    const availableBarbersList = await getAvailableBarbersForSlot(
+      timeSlot, 
+      selectedService.id, 
+      selectedDate, 
+      selectedBarbershop.id
+    )
+    
+    console.log(`Barbeiros disponíveis para ${timeSlot}:`, availableBarbersList.map(b => b.name))
+    setAvailableBarbers(availableBarbersList)
+    
+  } catch (error) {
+    console.error("Erro ao buscar barbeiros disponíveis:", error)
+    setAvailableBarbers([])
+  } finally {
+    setBookingLoading(false)
+  }
+}
+
+// Adicione esta função após fetchAvailableBarbers
+const fetchAvailableSlotsForBarber = async (barberId: string, date: string) => {
+  if (!selectedBarbershop || !barberId || !date) return
+  
+  try {
+    setBookingLoading(true)
+    const allSlotsSet = new Set<string>()
+    
+    for (const service of services) {
+      const slots = await getAvailableTimeSlots(barberId, service.id, date, selectedBarbershop.id)
+      slots.forEach(slot => allSlotsSet.add(slot))
+    }
+    
+    const allSlots = Array.from(allSlotsSet).sort()
+    setAvailableSlots(allSlots)
+    
+  } catch (error) {
+    console.error("Erro ao buscar horários:", error)
+    setAvailableSlots([])
+  } finally {
+    setBookingLoading(false)
+  }
+}
+
+  // Confirmar agendamento
+  const confirmBooking = async () => {
+  console.log("=== DEBUG AGENDAMENTO ===")
+  console.log("Barbearia:", selectedBarbershop?.name)
+  console.log("Barbeiro:", selectedBarber?.name) 
+  console.log("Serviço:", selectedService?.name)
+  console.log("Data:", selectedDate)
+  console.log("Hora:", selectedTime)
+  console.log("Cliente:", clientData?.id)
+  console.log("========================")
+
+  if (!selectedBarbershop || !selectedBarber || !selectedService || !selectedDate || !selectedTime) {
+  alert("Dados incompletos para o agendamento")
+  return
+}
+
+if (!clientData?.id && !profileData?.id) {
+  alert("Dados do cliente não encontrados. Tente fazer login novamente.")
+  return
+}
+
+    try {
+      setBookingLoading(true)
+      
+      // Criar datetime local
+      const startDateTime = createLocalDateTime(selectedDate, selectedTime);
+      // Como o banco espera UTC, mas queremos salvar horário local, 
+      // adicionar 3 horas para compensar a conversão automática
+      const startDateTimeUTC = new Date(startDateTime.getTime() - (3 * 60 * 60 * 1000));
+      const endDateTime = new Date(startDateTimeUTC.getTime() + selectedService.duration_minutes * 60000);
+
+      console.log("=== CORREÇÃO FUSO ===");
+      console.log("Horário selecionado:", selectedTime);
+      console.log("DateTime local criado:", startDateTime.toLocaleString('pt-BR'));
+      console.log("DateTime UTC para salvar:", startDateTimeUTC.toISOString());
+      console.log("==================");
+
+      console.log("=== DEBUG HORÁRIOS ===");
+      console.log("Data selecionada:", selectedDate);
+      console.log("Hora selecionada:", selectedTime);
+      console.log("DateTime criado:", startDateTime);
+      console.log("ISO String:", startDateTime.toISOString());
+      console.log("Hora local:", startDateTime.toLocaleTimeString('pt-BR'));
+      console.log("====================");
+      
+      // Verificar disponibilidade mais uma vez antes de confirmar
+      const { data: conflictCheck } = await supabase
+        .from("appointments")
+        .select("id")
+        .eq("barber_id", selectedBarber.id)
+        .lte("start_at", endDateTime.toISOString())
+        .gte("end_at", startDateTime.toISOString())
+        .in("status", ["confirmed", "pending"]);
+      
+      if (conflictCheck && conflictCheck.length > 0) {
+        alert("Este horário não está mais disponível. Por favor, escolha outro horário.");
+        // Recarregar os slots disponíveis
+        if (bookingMethod === "by-time") {
+          fetchAvailableSlots(selectedService.id, selectedDate);
+        } else {
+          fetchAvailableSlots(selectedService.id, selectedDate);
+        }
+        return;
+      }
+      
+      // Criar o agendamento
+      const { data: appointment, error } = await supabase
+        .from("appointments")
+        .insert({
+          barber_id: selectedBarber.id,
+          barbershop_id: selectedBarbershop.id,
+          client_id: clientData?.id || profileData?.id,
+          start_at: startDateTimeUTC.toISOString(),
+          end_at: endDateTime.toISOString(),
+          status: "pending",
+          total_price: selectedService.price,
+          user_id: clientData?.user_id || profileData?.id
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Criar o serviço do agendamento
+      await supabase
+        .from("appointment_services")
+        .insert({
+          appointment_id: appointment.id,
+          service_id: selectedService.id,
+          name_snapshot: selectedService.name,
+          price_snapshot: selectedService.price,
+          duration_minutes_snapshot: selectedService.duration_minutes
+        })
+
+      alert("Agendamento realizado com sucesso!")
+      
+      // Reset form
+      setBookingStep("barbershop")
+      setBookingMethod("")
+      setSelectedBarbershop(null)
+      setSelectedService(null)
+      setSelectedBarber(null)
+      setSelectedDate("")
+      setSelectedTime("")
+      setAvailableSlots([])
+      setAvailableBarbers([])
+      
+    } catch (error) {
+      console.error("Erro ao confirmar agendamento:", error)
+      alert("Erro ao realizar agendamento. Tente novamente.")
+    } finally {
+      setBookingLoading(false)
+    }
+  }
+
+  // Gerar datas para os próximos 30 dias
+  const getAvailableDates = () => {
+    const dates = []
+    const today = new Date()
+    
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(today)
+      date.setDate(today.getDate() + i)
+      dates.push(date.toISOString().split('T')[0])
+    }
+    
+    return dates
+  }
+
+  // Carregar barbearias ao montar o componente
+  useEffect(() => {
+    fetchBarbershops()
+  }, [])
 
   useEffect(() => {
     let isMounted = true;
@@ -98,7 +410,6 @@ export default function Cliente() {
             </div>
           </div>
 
-
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 shadow-xl overflow-hidden">
             <Tabs defaultValue="agendamento" value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="w-full grid grid-cols-2 bg-slate-100/50 p-2 rounded-none">
@@ -119,7 +430,490 @@ export default function Cliente() {
               </TabsList>
 
               <TabsContent value="agendamento" className="p-6">
-                <ClientBooking />
+                <div className="space-y-6">
+                  {/* Header do agendamento */}
+                  <div className="text-center space-y-2">
+                    <h2 className="text-2xl font-bold text-slate-800">Novo Agendamento</h2>
+                    <p className="text-slate-600">Siga os passos para agendar seu horário</p>
+                  </div>
+
+                  {/* Progress indicator */}
+                  <div className="flex items-center justify-center space-x-4 mb-8">
+                    <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
+                      bookingStep === "barbershop" ? "bg-blue-100 text-blue-700" : 
+                      ["method", "service", "barber", "date", "time", "confirm"].includes(bookingStep) ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                    }`}>
+                      <MapPin size={16} />
+                      <span>Barbearia</span>
+                    </div>
+                    <div className="w-8 h-px bg-gray-300"></div>
+                    <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
+                      bookingStep === "method" ? "bg-blue-100 text-blue-700" : 
+                      ["service", "barber", "date", "time", "confirm"].includes(bookingStep) ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                    }`}>
+                      <Clock size={16} />
+                      <span>Método</span>
+                    </div>
+                    <div className="w-8 h-px bg-gray-300"></div>
+                    <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
+                      ["service", "barber"].includes(bookingStep) ? "bg-blue-100 text-blue-700" : 
+                      ["date", "time", "confirm"].includes(bookingStep) ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                    }`}>
+                      <Scissors size={16} />
+                      <span>Serviço/Barbeiro</span>
+                    </div>
+                    <div className="w-8 h-px bg-gray-300"></div>
+                    <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
+                      ["date", "time"].includes(bookingStep) ? "bg-blue-100 text-blue-700" : 
+                      bookingStep === "confirm" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                    }`}>
+                      <Calendar size={16} />
+                      <span>Data/Hora</span>
+                    </div>
+                  </div>
+
+                  {/* Conteúdo dos passos */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+                    {/* Passo 1: Selecionar Barbearia */}
+                    {bookingStep === "barbershop" && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-800 mb-4">Escolha a barbearia</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {barbershops.map((shop) => (
+                            <button
+                              key={shop.id}
+                              onClick={() => {
+                                setSelectedBarbershop(shop)
+                                fetchServices(shop.id)
+                                fetchBarbers(shop.id)
+                                setBookingStep("method")
+                              }}
+                              className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 text-left"
+                            >
+                              <div className="flex items-center space-x-3">
+                                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                                  <Scissors className="text-white" size={20} />
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold text-slate-800">{shop.name}</h4>
+                                  <p className="text-sm text-slate-600">Clique para selecionar</p>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Passo 2: Escolher método */}
+                    {bookingStep === "method" && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-800 mb-4">Como deseja agendar?</h3>
+                        <p className="text-sm text-slate-600 mb-6">Barbearia selecionada: <strong>{selectedBarbershop?.name}</strong></p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <button
+                            onClick={() => {
+                              setBookingMethod("by-time")
+                              setBookingStep("service")
+                            }}
+                            className="p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200"
+                          >
+                            <div className="text-center space-y-3">
+                              <Clock className="mx-auto text-blue-600" size={32} />
+                              <h4 className="font-semibold text-slate-800">Por Horário</h4>
+                              <p className="text-sm text-slate-600">Escolha o serviço, depois a data e horário, e veja os barbeiros disponíveis</p>
+                            </div>
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              setBookingMethod("by-barber")
+                              setBookingStep("barber")
+                            }}
+                            className="p-6 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200"
+                          >
+                            <div className="text-center space-y-3">
+                              <User className="mx-auto text-blue-600" size={32} />
+                              <h4 className="font-semibold text-slate-800">Por Barbeiro</h4>
+                              <p className="text-sm text-slate-600">Escolha o barbeiro, depois a data e horário disponível</p>
+                            </div>
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setBookingStep("barbershop")
+                            setSelectedBarbershop(null)
+                            setBookingMethod("")
+                          }}
+                          className="mt-4 px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
+                        >
+                          ← Voltar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Passo 3A: Selecionar Serviço (Por horário) */}
+                    {bookingStep === "service" && bookingMethod === "by-time" && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-800 mb-4">Escolha o serviço</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {services.map((service) => (
+                            <button
+                              key={service.id}
+                              onClick={() => {
+                                setSelectedService(service)
+                                setBookingStep("date")
+                              }}
+                              className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 text-left"
+                            >
+                              <div className="space-y-2">
+                                <h4 className="font-semibold text-slate-800">{service.name}</h4>
+                                {service.description && (
+                                  <p className="text-sm text-slate-600">{service.description}</p>
+                                )}
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-slate-600">{service.duration_minutes} min</span>
+                                  <span className="font-semibold text-green-600">R$ {service.price.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          onClick={() => setBookingStep("method")}
+                          className="mt-4 px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
+                        >
+                          ← Voltar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Passo 3B: Selecionar Barbeiro (Por barbeiro) */}
+                    {bookingStep === "barber" && bookingMethod === "by-barber" && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-800 mb-4">Escolha o barbeiro</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {barbers.map((barber) => (
+                            <button
+                              key={barber.id}
+                              onClick={() => {
+                                setSelectedBarber(barber)
+                                setBookingStep("date")
+                              }}
+                              className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 text-left"
+                            >
+                              <div className="flex items-center space-x-3">
+                                <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg flex items-center justify-center">
+                                  <User className="text-white" size={20} />
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold text-slate-800">{barber.name}</h4>
+                                  <p className="text-sm text-slate-600">{barber.phone || "Profissional"}</p>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          onClick={() => setBookingStep("method")}
+                          className="mt-4 px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
+                        >
+                          ← Voltar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Passo 4: Selecionar Data */}
+                    {bookingStep === "date" && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                          Escolha a data
+                          {bookingMethod === "by-time" && selectedService && (
+                            <span className="text-sm font-normal text-slate-600 block">
+                              Serviço: {selectedService.name} ({selectedService.duration_minutes} min)
+                            </span>
+                          )}
+                          {bookingMethod === "by-barber" && selectedBarber && (
+                            <span className="text-sm font-normal text-slate-600 block">
+                              Barbeiro: {selectedBarber.name}
+                            </span>
+                          )}
+                        </h3>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                          {getAvailableDates().map((date) => {
+                            const dateObj = new Date(date + 'T00:00:00')
+                            const dayName = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' })
+                            const dayNumber = dateObj.getDate()
+                            const monthName = dateObj.toLocaleDateString('pt-BR', { month: 'short' })
+                            
+                            return (
+                              <button
+                                key={date}
+                                onClick={() => {
+                                  setSelectedDate(date)
+                                  if (bookingMethod === "by-time") {
+                                    fetchAvailableSlots(selectedService.id, date)
+                                  } else {
+                                    fetchAvailableSlotsForBarber(selectedBarber.id, date)
+                                  }
+                                  setBookingStep("time")
+                                }}
+                                className="p-3 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 text-center"
+                              >
+                                <div className="text-xs text-slate-600 uppercase">{dayName}</div>
+                                <div className="text-lg font-semibold text-slate-800">{dayNumber}</div>
+                                <div className="text-xs text-slate-600">{monthName}</div>
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (bookingMethod === "by-time") {
+                              setBookingStep("service")
+                            } else {
+                              setBookingStep("barber")
+                            }
+                          }}
+                          className="mt-4 px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
+                        >
+                          ← Voltar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Passo 5: Selecionar Horário */}
+                    {bookingStep === "time" && (
+                      <div className="space-y-4">
+                        {bookingLoading ? (
+                          <div className="text-center py-8">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="text-slate-600 mt-2">Buscando horários disponíveis...</p>
+                          </div>
+                        ) : (
+                          <>
+                            <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                              Escolha o horário
+                              <span className="text-sm font-normal text-slate-600 block">
+                                Data: {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                {bookingMethod === "by-time" && selectedService && (
+                                  <> • Serviço: {selectedService.name}</>
+                                )}
+                                {bookingMethod === "by-barber" && selectedBarber && (
+                                  <> • Barbeiro: {selectedBarber.name}</>
+                                )}
+                              </span>
+                            </h3>
+                            
+                            {availableSlots.length === 0 ? (
+                              <div className="text-center py-8 text-slate-600">
+                                <Clock size={32} className="mx-auto mb-2 text-slate-400" />
+                                <p>Nenhum horário disponível para esta data.</p>
+                                <p className="text-sm">Tente selecionar outra data.</p>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                {availableSlots.map((time) => (
+                                  <button
+                                    key={time}
+                                    onClick={() => {
+                                      setSelectedTime(time)
+                                      if (bookingMethod === "by-time") {
+                                        fetchAvailableBarbers(time)
+                                        setBookingStep("confirm")
+                                      } else {
+                                        setBookingStep("service-selection")
+                                      }
+                                    }}
+                                    className="p-3 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 text-center font-medium"
+                                  >
+                                    {time}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        <button
+                          onClick={() => setBookingStep("date")}
+                          className="mt-4 px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
+                        >
+                          ← Voltar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Passo 6A: Selecionar Barbeiro (Por horário) */}
+                    {bookingStep === "confirm" && bookingMethod === "by-time" && (
+                      <div className="space-y-4">
+                        {bookingLoading ? (
+                          <div className="text-center py-8">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="text-slate-600 mt-2">Buscando barbeiros disponíveis...</p>
+                          </div>
+                        ) : (
+                          <>
+                            <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                              Escolha o barbeiro
+                              <span className="text-sm font-normal text-slate-600 block">
+                                {selectedService?.name} • {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')} às {selectedTime}
+                              </span>
+                            </h3>
+                            
+                            {availableBarbers.length === 0 ? (
+                              <div className="text-center py-8 text-slate-600">
+                                <User size={32} className="mx-auto mb-2 text-slate-400" />
+                                <p>Nenhum barbeiro disponível para este horário.</p>
+                                <p className="text-sm">Tente selecionar outro horário.</p>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                {availableBarbers.map((barber) => (
+                                  <button
+                                    key={barber.id}
+                                    onClick={() => {
+                                      setSelectedBarber(barber)
+                                    }}
+                                    className={`p-4 border-2 rounded-lg transition-all duration-200 text-left ${
+                                      selectedBarber?.id === barber.id
+                                        ? "border-green-500 bg-green-50"
+                                        : "border-gray-200 hover:border-blue-500 hover:bg-blue-50"
+                                    }`}
+                                  >
+                                    <div className="flex items-center space-x-3">
+                                      <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg flex items-center justify-center">
+                                        <User className="text-white" size={20} />
+                                      </div>
+                                      <div>
+                                        <h4 className="font-semibold text-slate-800">{barber.name}</h4>
+                                        <p className="text-sm text-slate-600">{barber.phone || "Profissional"}</p>
+                                      </div>
+                                      {selectedBarber?.id === barber.id && (
+                                        <CheckCircle className="text-green-600 ml-auto" size={20} />
+                                      )}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            {selectedBarber && (
+                              <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                                <h4 className="font-semibold text-slate-800 mb-4">Resumo do Agendamento</h4>
+                                <div className="space-y-2 text-sm">
+                                  <p><strong>Barbearia:</strong> {selectedBarbershop?.name}</p>
+                                  <p><strong>Serviço:</strong> {selectedService?.name} ({selectedService?.duration_minutes} min)</p>
+                                  <p><strong>Barbeiro:</strong> {selectedBarber.name}</p>
+                                  <p><strong>Data:</strong> {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                                  <p><strong>Horário:</strong> {selectedTime}</p>
+                                  <p><strong>Valor:</strong> R$ {selectedService?.price.toFixed(2)}</p>
+                                </div>
+                                
+                                <button
+                                  onClick={confirmBooking}
+                                  disabled={bookingLoading}
+                                  className="w-full mt-4 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {bookingLoading ? "Confirmando..." : "Confirmar Agendamento"}
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        <button
+                          onClick={() => setBookingStep("time")}
+                          className="mt-4 px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
+                        >
+                          ← Voltar
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Passo 6B: Selecionar Serviço (Por barbeiro) */}
+                    {bookingStep === "service-selection" && bookingMethod === "by-barber" && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-slate-800 mb-4">
+                          Escolha o serviço
+                          <span className="text-sm font-normal text-slate-600 block">
+                            {selectedBarber?.name} • {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')} às {selectedTime}
+                          </span>
+                        </h3>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                          {services.map((service) => (
+                            <button
+                              key={service.id}
+                              onClick={() => {
+                                setSelectedService(service)
+                              }}
+                              className={`p-4 border-2 rounded-lg transition-all duration-200 text-left ${
+                                selectedService?.id === service.id
+                                  ? "border-green-500 bg-green-50"
+                                  : "border-gray-200 hover:border-blue-500 hover:bg-blue-50"
+                              }`}
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="font-semibold text-slate-800">{service.name}</h4>
+                                  {selectedService?.id === service.id && (
+                                    <CheckCircle className="text-green-600" size={20} />
+                                  )}
+                                </div>
+                                {service.description && (
+                                  <p className="text-sm text-slate-600">{service.description}</p>
+                                )}
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-slate-600">{service.duration_minutes} min</span>
+                                  <span className="font-semibold text-green-600">R$ {service.price.toFixed(2)}</span>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        {selectedService && (
+                          <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                            <h4 className="font-semibold text-slate-800 mb-4">Resumo do Agendamento</h4>
+                            <div className="space-y-2 text-sm">
+                              <p><strong>Barbearia:</strong> {selectedBarbershop?.name}</p>
+                              <p><strong>Barbeiro:</strong> {selectedBarber?.name}</p>
+                              <p><strong>Serviço:</strong> {selectedService.name} ({selectedService.duration_minutes} min)</p>
+                              <p><strong>Data:</strong> {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                              <p><strong>Horário:</strong> {selectedTime}</p>
+                              <p><strong>Valor:</strong> R$ {selectedService.price.toFixed(2)}</p>
+                            </div>
+                            
+                            <button
+                              onClick={() => {
+                                console.log("Clicou confirmar - Serviço selecionado:", selectedService?.name)
+                                confirmBooking()
+                              }}
+                              disabled={bookingLoading}
+                              className="w-full mt-4 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white rounded-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {bookingLoading ? "Confirmando..." : "Confirmar Agendamento"}
+                            </button>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => setBookingStep("time")}
+                          className="mt-4 px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
+                        >
+                          ← Voltar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="perfil" className="p-6">

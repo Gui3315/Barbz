@@ -14,7 +14,6 @@ import {
   SelectValue
 } from "@/components/ui/select"
 import { useEffect, useState } from "react"
-import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
@@ -55,8 +54,6 @@ interface Service {
 import { salonSchedule, generateTimeSlots } from "@/config/salonSchedule"
 
 export default function Agendamentos() {
-  const user = useRequireAuth({ requiredUserType: 'proprietario' });
-  if (!user) return <div>Carregando...</div>;
   const { toast } = useToast()
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
   const [newAppointmentDate, setNewAppointmentDate] = useState<Date | undefined>(new Date())
@@ -162,12 +159,8 @@ export default function Agendamentos() {
       // Marcar horários ocupados
       const occupied: Set<string> = new Set()
       ;(dayAppointments || []).forEach((appt: any) => {
-        const apptStart = new Date(appt.start_at)
-        
-        // Extrair hora e minuto diretamente (JavaScript já converte automaticamente para timezone local)
-        const apptHour = apptStart.getHours().toString().padStart(2, '0')
-        const apptMinute = apptStart.getMinutes().toString().padStart(2, '0')
-        const apptTimeSlot = `${apptHour}:${apptMinute}`
+        // Extrair hora diretamente da string, sem conversão de timezone
+        const apptTimeSlot = appt.start_at.substring(11, 16) // Pega HH:MM diretamente
         
         // Marcar esse horário como ocupado
         occupied.add(apptTimeSlot)
@@ -307,17 +300,27 @@ export default function Agendamentos() {
       })
       return
     }
-    // Montar start_at (data + hora escolhida) com offset UTC-3
-    const dateStr = format(newAppointmentDate, "yyyy-MM-dd")
-    const start_at = `${dateStr}T${selectedTime}:00-03:00`
-    // Calcular end_at com base na duração do serviço
+
+    // Usar a mesma lógica da página de agendamentos
+    const createLocalDateTime = (date, time) => {
+      const [hours, minutes] = time.split(':');
+      const dateTime = new Date(date);
+      dateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      return dateTime;
+    };
+
+    // Calcular horários usando a mesma lógica
     const service = services.find((s) => s.id === selectedService)
     const duration = service ? service.duration_minutes : 30
     const total_price = service ? Number(service.price) : 0
-    const [h, m] = selectedTime.split(":")
-    const endDate = new Date(newAppointmentDate)
-    endDate.setHours(Number(h), Number(m) + duration, 0, 0)
-    const end_at = format(endDate, "yyyy-MM-dd'T'HH:mm:ssXXX")
+
+    const startDateTime = createLocalDateTime(newAppointmentDate, selectedTime);
+    const startDateTimeUTC = new Date(startDateTime.getTime() - (3 * 60 * 60 * 1000));
+    const start_at = startDateTimeUTC.toISOString();
+
+    const endDateTime = new Date(startDateTimeUTC.getTime() + duration * 60000);
+    const end_at = endDateTime.toISOString();
+
     // Buscar barbershop_id na tabela barbershops onde owner_id = user_id
     let barbershop_id = null
     if (user_id) {
@@ -679,10 +682,7 @@ export default function Agendamentos() {
                             <Clock size={14} className="mr-2 text-blue-600" />
                             <span className="font-medium">
                               {appointment.start_at
-                                ? new Date(appointment.start_at).toLocaleTimeString("pt-BR", {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })
+                                ? appointment.start_at.substring(11, 16)
                                 : "--:--"}
                             </span>
                           </div>
