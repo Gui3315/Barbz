@@ -10,6 +10,7 @@ import { getAvailableTimeSlots, getAvailableBarbersForSlot } from "@/utils/avail
 import { ClientLayout } from "@/components/client/layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar, User, LogOut, Camera, Save, Clock, Scissors, MapPin, CheckCircle, History, ClockIcon, X } from "lucide-react"
+import { createPortal } from "react-dom"
 
 // Função para gerar slots de horário baseado no horário de abertura e fechamento
 function generateTimeSlots(openTime: string, closeTime: string, intervalMinutes = 30): string[] {
@@ -74,6 +75,280 @@ export default function Cliente() {
   // Estado para aba "Meus Agendamentos"
   const [userAppointments, setUserAppointments] = useState<any[]>([])
   const [appointmentsLoading, setAppointmentsLoading] = useState(false)
+  // Estado para reagendamento
+  const [isRescheduling, setIsRescheduling] = useState(false)
+  const [reschedulingAppointment, setReschedulingAppointment] = useState(null)
+  const [rescheduleDate, setRescheduleDate] = useState("")
+  const [rescheduleTime, setRescheduleTime] = useState("")
+  const [rescheduleAvailableSlots, setRescheduleAvailableSlots] = useState([])
+  const [rescheduleLoading, setRescheduleLoading] = useState(false)
+
+  // Função para buscar horários disponíveis para reagendamento
+const fetchAvailableSlotsForReschedule = async (appointmentId, barberId, serviceId, date, barbershopId) => {
+  if (!barberId || !serviceId || !date || !barbershopId) {
+    console.error("Parâmetros faltando para reagendamento:", { appointmentId, barberId, serviceId, date, barbershopId })
+    setRescheduleAvailableSlots([])
+    return
+  }
+
+  try {
+    setRescheduleLoading(true)
+    
+    // 1. Buscar duração do serviço
+    const { data: service, error: serviceError } = await supabase
+      .from("services")
+      .select("duration_minutes")
+      .eq("id", serviceId)
+      .single()
+
+    if (serviceError || !service) {
+      console.error("Erro ao buscar serviço:", serviceError)
+      setRescheduleAvailableSlots([])
+      return
+    }
+
+    const serviceDuration = service.duration_minutes
+    console.log(`🔍 REAGENDAMENTO - Serviço: ${serviceDuration} minutos`)
+
+    // 2. Buscar horários ocupados EXCLUINDO o agendamento atual que está sendo reagendado
+    const occupied = new Set<string>()
+    
+    const startUTC = new Date(date + 'T03:00:00.000Z')
+    const endUTC = new Date(date + 'T02:59:59.999Z')
+    endUTC.setDate(endUTC.getDate() + 1)
+
+    const { data: appointments, error } = await supabase 
+      .from("appointments") 
+      .select("start_at, end_at, barbershop_id, id") 
+      .eq("barber_id", barberId) 
+      .gte("start_at", startUTC.toISOString()) 
+      .lte("start_at", endUTC.toISOString()) 
+      .in("status", ["confirmed", "pending"])
+      .neq("id", appointmentId) // EXCLUIR o agendamento atual
+
+    if (appointments && appointments.length > 0) { 
+      const filteredAppointments = barbershopId  
+        ? appointments.filter(apt => apt.barbershop_id === barbershopId) 
+        : appointments 
+      
+      filteredAppointments.forEach(appointment => { 
+        const start = new Date(appointment.start_at)
+        const end = new Date(appointment.end_at)
+        
+        const localStart = new Date(start.getTime() + (3 * 60 * 60 * 1000))
+        const localEnd = new Date(end.getTime() + (3 * 60 * 60 * 1000))
+        
+        const startMinutes = localStart.getHours() * 60 + localStart.getMinutes()
+        const endMinutes = localEnd.getHours() * 60 + localEnd.getMinutes()
+        
+        for (let minutes = startMinutes; minutes < endMinutes; minutes += 30) {
+          const hours = Math.floor(minutes / 60)
+          const mins = minutes % 60
+          const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
+          occupied.add(timeStr)
+        }
+      })
+    }
+
+    console.log(`🔍 REAGENDAMENTO - Horários ocupados (excluindo atual):`, Array.from(occupied))
+
+    // 3. Buscar horário de funcionamento
+    const dayIndex = new Date(date + 'T00:00:00').getDay()
+    const weekDays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+    const selectedDayKey = weekDays[dayIndex]
+    
+    const { data: schedule, error: scheduleError } = await supabase
+      .from("salon_schedule")
+      .select("open, close, active")
+      .eq("barbershop_id", barbershopId)
+      .eq("day", selectedDayKey)
+      .single()
+
+    if (scheduleError || !schedule?.active) {
+      console.log(`Barbearia fechada no dia ${selectedDayKey}`)
+      setRescheduleAvailableSlots([])
+      return
+    }
+
+    // 4. Buscar dados do barbeiro (horário de almoço)
+    const { data: barber } = await supabase
+      .from("barbers")
+      .select("lunch_start, lunch_end")
+      .eq("id", barberId)
+      .single()
+
+    // 5. Gerar todos os slots possíveis
+    const slots = generateTimeSlots(schedule.open, schedule.close)
+    
+    // 6. Verificar disponibilidade considerando a duração correta do serviço
+    const available = slots.filter((slot) => {
+      const [slotH, slotM] = slot.split(':').map(Number)
+      const [closeH, closeM] = schedule.close.split(':').map(Number)
+      
+      const slotMinutes = slotH * 60 + slotM
+      const closeMinutes = closeH * 60 + closeM
+      const serviceEndMinutes = slotMinutes + serviceDuration
+      
+      // Verificar se cabe até fechamento
+      if (serviceEndMinutes > closeMinutes) {
+        return false
+      }
+
+      // VERIFICAÇÃO CORRIGIDA: Verificar se TODOS os slots necessários estão livres
+      const slotsNeeded = Math.ceil(serviceDuration / 30)
+      console.log(`🔍 REAGENDAMENTO - Slot ${slot} precisa de ${slotsNeeded} slots para ${serviceDuration} minutos`)
+      
+      let currentMinutes = slotMinutes
+      for (let i = 0; i < slotsNeeded; i++) {
+        const checkHour = Math.floor(currentMinutes / 60)
+        const checkMin = currentMinutes % 60
+        const checkTimeStr = `${checkHour.toString().padStart(2, '0')}:${checkMin.toString().padStart(2, '0')}`
+        
+        if (occupied.has(checkTimeStr)) {
+          console.log(`❌ REAGENDAMENTO - Slot ${slot} conflito no slot ${i+1}/${slotsNeeded}: ${checkTimeStr}`)
+          return false
+        }
+        
+        currentMinutes += 30
+      }
+
+      // Verificar horário de almoço
+      if (barber?.lunch_start && barber?.lunch_end) {
+        const [lunchStartH, lunchStartM] = barber.lunch_start.split(':').map(Number)
+        const [lunchEndH, lunchEndM] = barber.lunch_end.split(':').map(Number)
+        
+        const lunchStartMinutes = lunchStartH * 60 + lunchStartM
+        const lunchEndMinutes = lunchEndH * 60 + lunchEndM
+        const slotEndMinutes = slotMinutes + serviceDuration
+        
+        if (!(slotEndMinutes <= lunchStartMinutes || slotMinutes >= lunchEndMinutes)) {
+          return false
+        }
+      }
+
+      // Verificar se é hoje e já passou
+      const now = new Date()
+      const selectedDateObj = new Date(date + 'T00:00:00')
+      const isToday = selectedDateObj.toDateString() === now.toDateString()
+      
+      if (isToday) {
+        const slotTime = new Date(selectedDateObj)
+        slotTime.setHours(slotH, slotM, 0, 0)
+        
+        if (slotTime <= now) {
+          return false
+        }
+      }
+      
+      console.log(`✅ REAGENDAMENTO - Slot ${slot} DISPONÍVEL`)
+      return true
+    })
+    
+    console.log(`Total slots disponíveis para reagendamento:`, available)
+    setRescheduleAvailableSlots(available)
+    
+  } catch (error) {
+    console.error("❌ Erro ao buscar horários:", error)
+    console.error("Error details:", error.message)
+    setRescheduleAvailableSlots([])
+  } finally {
+    setRescheduleLoading(false)
+    console.log("=== FIM FETCH RESCHEDULE ===")
+  }
+}
+
+// Função para iniciar reagendamento
+const startRescheduling = (appointment) => {
+  setReschedulingAppointment(appointment)
+  setIsRescheduling(true)
+  setRescheduleDate("")
+  setRescheduleTime("")
+  setRescheduleAvailableSlots([])
+}
+
+// Função para confirmar reagendamento
+const confirmReschedule = async () => {
+  if (!reschedulingAppointment || !rescheduleDate || !rescheduleTime) {
+    alert("Por favor, selecione uma nova data e horário")
+    return
+  }
+  
+  try {
+    setRescheduleLoading(true)
+    
+    // Extrair duração do serviço
+    const service = reschedulingAppointment.appointment_services?.[0]
+    if (!service) {
+      alert("Erro: informações do serviço não encontradas")
+      return
+    }
+    
+    // Criar horários locais e salvar como UTC no banco
+    const newStartDateTime = createLocalDateTime(rescheduleDate, rescheduleTime);
+    const newStartDateTimeUTC = new Date(newStartDateTime.getTime() - (3 * 60 * 60 * 1000));
+    const newEndDateTime = new Date(newStartDateTimeUTC.getTime() + service.duration_minutes_snapshot * 60000);
+    
+    // Verificar conflitos uma última vez
+    const { data: conflictCheck } = await supabase
+      .from("appointments")
+      .select("id")
+      .eq("barber_id", reschedulingAppointment.barber_id)
+      .neq("id", reschedulingAppointment.id) // Excluir o próprio agendamento
+      .or(`and(start_at.lt.${newEndDateTime.toISOString()},end_at.gt.${newStartDateTimeUTC.toISOString()})`)
+      .eq("status", "confirmed")
+    
+    if (conflictCheck && conflictCheck.length > 0) {
+      alert("Este horário não está mais disponível. Por favor, escolha outro horário.")
+      fetchAvailableSlotsForReschedule(
+        reschedulingAppointment.id,
+        reschedulingAppointment.barber_id,
+        service.service_id || reschedulingAppointment.appointment_services[0]?.id,
+        rescheduleDate,
+        reschedulingAppointment.barbershop_id
+      )
+      return
+    }
+    
+    // Atualizar o agendamento
+    const { error } = await supabase
+      .from("appointments")
+      .update({
+      start_at: newStartDateTimeUTC.toISOString(),
+      end_at: newEndDateTime.toISOString(),
+      updated_at: new Date().toISOString()
+    })
+      .eq("id", reschedulingAppointment.id)
+    
+    if (error) throw error
+    
+    alert("Agendamento reagendado com sucesso!")
+    
+    // Recarregar lista de agendamentos
+    fetchUserAppointments()
+    
+    // Limpar estado de reagendamento
+    setIsRescheduling(false)
+    setReschedulingAppointment(null)
+    setRescheduleDate("")
+    setRescheduleTime("")
+    setRescheduleAvailableSlots([])
+    
+  } catch (error) {
+    console.error("Erro ao reagendar:", error)
+    alert("Erro ao reagendar agendamento. Tente novamente.")
+  } finally {
+    setRescheduleLoading(false)
+  }
+}
+
+// Cancelar reagendamento
+const cancelReschedule = () => {
+  setIsRescheduling(false)
+  setReschedulingAppointment(null)
+  setRescheduleDate("")
+  setRescheduleTime("")
+  setRescheduleAvailableSlots([])
+}
 
   // Buscar agendamentos do usuário
   const fetchUserAppointments = async () => {
@@ -95,17 +370,18 @@ export default function Cliente() {
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       const { data, error } = await supabase
-        .from("appointments")
-        .select(`
-          *,
-          barbers (name, phone),
-          barbershops (name),
-          appointment_services (
-            name_snapshot,
-            price_snapshot,
-            duration_minutes_snapshot
-          )
-        `)
+      .from("appointments")
+      .select(`
+        *,
+        barbers (name, phone),
+        barbershops (name),
+        appointment_services (
+          service_id,
+          name_snapshot,
+          price_snapshot,
+          duration_minutes_snapshot
+        )
+      `)
         .eq("client_id", clientId)
         .gte("start_at", todayStart.toISOString())
         .order("start_at", { ascending: true })
@@ -623,6 +899,7 @@ useEffect(() => {
                   <h2 className="text-2xl font-bold text-slate-800">Meus Agendamentos</h2>
                   <p className="text-slate-600">Visualize e gerencie seus próximos horários</p>
                 </div>
+                
 
                 {appointmentsLoading ? (
                   <div className="text-center py-12">
@@ -651,8 +928,8 @@ useEffect(() => {
                       const isConfirmed = status === "confirmed"
                       const isCancelled = status === "cancelled"
                       
-                      // Verificar se pode cancelar (até 2 horas antes)
-                      const canCancel = !isCancelled && new Date(startDate.getTime() - 2 * 60 * 60 * 1000) > new Date()
+                      // Verificar se pode cancelar ou reagendar (até 2 horas antes)
+                      const canModify = !isCancelled && new Date(startDate.getTime() - 2 * 60 * 60 * 1000) > new Date()
                       
                       return (
                         <div
@@ -691,14 +968,30 @@ useEffect(() => {
                               </p>
                             </div>
                             
-                            {canCancel && (
-                              <button
-                                onClick={() => cancelAppointment(appointment.id)}
-                                className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors duration-200"
-                                title="Cancelar agendamento"
-                              >
-                                <X size={20} />
-                              </button>
+                            {canModify && (
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => {
+                                    const service = appointment.appointment_services?.[0]
+                                    if (!service?.service_id) {
+                                      alert("Erro: Não foi possível encontrar informações do serviço. Tente atualizar a página.")
+                                      return
+                                    }
+                                    startRescheduling(appointment)
+                                  }}
+                                  className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors duration-200"
+                                  title="Reagendar"
+                                >
+                                  <Calendar size={20} />
+                                </button>
+                                <button
+                                  onClick={() => cancelAppointment(appointment.id)}
+                                  className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors duration-200"
+                                  title="Cancelar agendamento"
+                                >
+                                  <X size={20} />
+                                </button>
+                              </div>
                             )}
                           </div>
                           
@@ -739,9 +1032,140 @@ useEffect(() => {
                       )
                     })}
                   </div>
+                )}</div>
+            </TabsContent>
+
+{/* Modal de Reagendamento */}
+{isRescheduling && reschedulingAppointment && createPortal(
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
+    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-slate-800">Reagendar Horário</h3>
+          <button
+            onClick={cancelReschedule}
+            className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
+        
+        <div className="space-y-4 mb-6">
+          <div className="bg-slate-50 p-4 rounded-lg">
+            <h4 className="font-semibold text-slate-800 mb-2">Agendamento Atual</h4>
+            <div className="text-sm text-slate-600 space-y-1">
+              <p><strong>Barbearia:</strong> {reschedulingAppointment.barbershops?.name}</p>
+              <p><strong>Barbeiro:</strong> {reschedulingAppointment.barbers?.name}</p>
+              <p><strong>Serviço:</strong> {reschedulingAppointment.appointment_services?.[0]?.name_snapshot}</p>
+              <p><strong>Data atual:</strong> {new Date(reschedulingAppointment.start_at.substring(0, 19)).toLocaleDateString('pt-BR')}</p>
+              <p><strong>Horário atual:</strong> {new Date(reschedulingAppointment.start_at.substring(0, 19)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
+                Nova Data
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                {getAvailableDates().map((date) => {
+                  const dateObj = new Date(date + 'T00:00:00')
+                  const dayName = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' })
+                  const dayNumber = dateObj.getDate()
+                  const monthName = dateObj.toLocaleDateString('pt-BR', { month: 'short' })
+                  
+                  return (
+                    <button
+                      key={date}
+                      onClick={() => {
+                        setRescheduleDate(date)
+                        setRescheduleTime("") // Limpar horário selecionado
+                        
+                        const service = reschedulingAppointment.appointment_services?.[0]
+                        if (service && service.service_id) {
+                          fetchAvailableSlotsForReschedule(
+                            reschedulingAppointment.id,
+                            reschedulingAppointment.barber_id,
+                            service.service_id,
+                            date,
+                            reschedulingAppointment.barbershop_id
+                          )
+                        } else {
+                          console.error("Service_id não encontrado:", service)
+                          alert("Erro: ID do serviço não encontrado. Tente novamente.")
+                        }
+                      }}
+                      className={`p-2 border-2 rounded-lg transition-all duration-200 text-center ${
+                        rescheduleDate === date
+                          ? "border-blue-500 bg-blue-50"
+                          : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                      }`}
+                    >
+                      <div className="text-xs text-slate-600 uppercase">{dayName}</div>
+                      <div className="text-sm font-semibold text-slate-800">{dayNumber}</div>
+                      <div className="text-xs text-slate-600">{monthName}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            
+            {rescheduleDate && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Novo Horário
+                </label>
+                {rescheduleLoading ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="text-slate-600 text-sm mt-2">Buscando horários...</p>
+                  </div>
+                ) : rescheduleAvailableSlots.length === 0 ? (
+                  <p className="text-slate-600 text-center py-4">
+                    Nenhum horário disponível para esta data.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                    {rescheduleAvailableSlots.map((time) => (
+                      <button
+                        key={time}
+                        onClick={() => setRescheduleTime(time)}
+                        className={`p-2 border-2 rounded-lg transition-all duration-200 text-center font-medium ${
+                          rescheduleTime === time
+                            ? "border-green-500 bg-green-50"
+                            : "border-gray-200 hover:border-green-300 hover:bg-green-50"
+                        }`}
+                      >
+                        {time}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
-            </TabsContent>
+            )}
+          </div>
+        </div>
+        
+        <div className="flex gap-3">
+          <button
+            onClick={cancelReschedule}
+            className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={confirmReschedule}
+            disabled={!rescheduleDate || !rescheduleTime || rescheduleLoading}
+            className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            {rescheduleLoading ? "Reagendando..." : "Confirmar Reagendamento"}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>,
+  document.body
+)}
 
               <TabsContent value="agendamento" className="p-6">
                 <div className="space-y-6">

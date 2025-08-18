@@ -2,7 +2,7 @@
 import { supabase } from "@/lib/supabaseClient"
 
 // Função unificada para buscar horários ocupados de um barbeiro em uma data específica
-export async function getOccupiedSlots(barberId: string, date: string): Promise<Set<string>> {
+export async function getOccupiedSlots(barberId: string, date: string, barbershopId?: string): Promise<Set<string>> { 
   const occupied = new Set<string>()
   
   try {
@@ -11,13 +11,13 @@ export async function getOccupiedSlots(barberId: string, date: string): Promise<
     const endUTC = new Date(date + 'T02:59:59.999Z')   // 23:59 BRT
     endUTC.setDate(endUTC.getDate() + 1)
 
-    // Buscar agendamentos do barbeiro para este dia
-    const { data: appointments, error } = await supabase
-      .from("appointments")
-      .select("start_at, end_at")
-      .eq("barber_id", barberId)
-      .gte("start_at", startUTC.toISOString())
-      .lte("start_at", endUTC.toISOString())
+    // Buscar agendamentos do barbeiro para este dia (apenas da barbearia específica) 
+    const { data: appointments, error } = await supabase 
+      .from("appointments") 
+      .select("start_at, end_at, barbershop_id") 
+      .eq("barber_id", barberId) 
+      .gte("start_at", startUTC.toISOString()) 
+      .lte("start_at", endUTC.toISOString()) 
       .in("status", ["confirmed", "pending"])
 
     if (error) {
@@ -26,8 +26,12 @@ export async function getOccupiedSlots(barberId: string, date: string): Promise<
     }
 
     // Marcar horários ocupados
-    if (appointments && appointments.length > 0) {
-      appointments.forEach(appointment => {
+    if (appointments && appointments.length > 0) { 
+    const filteredAppointments = barbershopId  
+      ? appointments.filter(apt => apt.barbershop_id === barbershopId) 
+      : appointments 
+    
+    filteredAppointments.forEach(appointment => { 
         const start = new Date(appointment.start_at)
         const end = new Date(appointment.end_at)
         
@@ -117,7 +121,7 @@ export async function getOccupiedSlots(barberId: string, date: string): Promise<
     const slots = generateTimeSlots(schedule.open, schedule.close)
     
     // 5. Buscar horários ocupados
-    const occupied = await getOccupiedSlots(barberId, date)
+    const occupied = await getOccupiedSlots(barberId, date, barbershopId)
     
     // 6. Verificar disponibilidade de cada slot
     const available = slots.filter((slot) => {
