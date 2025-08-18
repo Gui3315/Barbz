@@ -29,15 +29,24 @@ export async function getOccupiedSlots(barberId: string, date: string): Promise<
     if (appointments && appointments.length > 0) {
       appointments.forEach(appointment => {
         const start = new Date(appointment.start_at)
+        const end = new Date(appointment.end_at)
         
         // Converter para horário local (BRT - UTC-3)
         const localStart = new Date(start.getTime() + (3 * 60 * 60 * 1000))
+        const localEnd = new Date(end.getTime() + (3 * 60 * 60 * 1000))
         
-        // Marcar horário ocupado
-        const timeStr = `${localStart.getHours().toString().padStart(2, '0')}:${localStart.getMinutes().toString().padStart(2, '0')}`
-        occupied.add(timeStr)
+        // Calcular todos os slots ocupados pelo agendamento
+        const startMinutes = localStart.getHours() * 60 + localStart.getMinutes()
+        const endMinutes = localEnd.getHours() * 60 + localEnd.getMinutes()
         
-        console.log(`Horário ocupado encontrado: ${timeStr} (original: ${start.toISOString()})`)
+        // Marcar todos os slots de 30min dentro do período do agendamento
+        for (let minutes = startMinutes; minutes < endMinutes; minutes += 30) {
+          const hours = Math.floor(minutes / 60)
+          const mins = minutes % 60
+          const timeStr = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
+          occupied.add(timeStr)
+          console.log(`Horário ocupado: ${timeStr} (agendamento ${localStart.toLocaleTimeString()} - ${localEnd.toLocaleTimeString()})`)
+        }
       })
     }
     
@@ -86,13 +95,16 @@ export async function getOccupiedSlots(barberId: string, date: string): Promise<
     }
 
     // 2. Buscar duração do serviço
-    const { data: service } = await supabase
+    console.log(`🔍 BUSCANDO serviço ID: ${serviceId}`)
+    const { data: service, error: serviceError } = await supabase
       .from("services")
-      .select("duration_minutes")
+      .select("id, name, duration_minutes")
       .eq("id", serviceId)
       .single()
 
+    console.log(`🔍 CONSULTA RESULTADO:`, { service, serviceError })
     const serviceDuration = service?.duration_minutes || 30
+    console.log(`🔍 DURAÇÃO FINAL: ${serviceDuration} minutos (service?.duration_minutes = ${service?.duration_minutes})`)
 
     // 3. Buscar dados do barbeiro (para horário de almoço)
     const { data: barber } = await supabase
@@ -128,22 +140,24 @@ export async function getOccupiedSlots(barberId: string, date: string): Promise<
         return false
       }
 
-      // Verificar se toda a duração está livre
+      // Verificar se todos os slots necessários estão livres
+      const slotsNeeded = Math.ceil(serviceDuration / 30) // 30min=1, 60min=2, 90min=3 slots
+      console.log(`🔍 DEBUG: Slot ${slot} precisa de ${slotsNeeded} slots para ${serviceDuration} minutos`)
       let currentMinutes = slotMinutes
-      const endMinutes = currentMinutes + serviceDuration
-      
-      while (currentMinutes < endMinutes) {
+
+      for (let i = 0; i < slotsNeeded; i++) {
         const checkHour = Math.floor(currentMinutes / 60)
         const checkMin = currentMinutes % 60
         const checkTimeStr = `${checkHour.toString().padStart(2, '0')}:${checkMin.toString().padStart(2, '0')}`
         
         if (occupied.has(checkTimeStr)) {
-          console.log(`Slot ${slot} conflito durante duração em ${checkTimeStr}`)
+          console.log(`Slot ${slot} precisa de ${slotsNeeded} slots, conflito no slot ${i+1}/${slotsNeeded}: ${checkTimeStr}`)
           return false
         }
         
         currentMinutes += 30
       }
+      console.log(`Slot ${slot} tem ${slotsNeeded} slots livres consecutivos`)
 
       // Verificar horário de almoço
       if (barber?.lunch_start && barber?.lunch_end) {
