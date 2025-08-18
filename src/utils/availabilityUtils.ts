@@ -48,27 +48,40 @@ export async function getOccupiedSlots(barberId: string, date: string): Promise<
   }
 }
 
-// Função unificada para verificar disponibilidade de horários para um barbeiro
-export async function getAvailableTimeSlots(
-  barberId: string, 
-  serviceId: string, 
-  date: string, 
-  barbershopId: string
-): Promise<string[]> {
-  try {
-    // 1. Buscar horário de funcionamento
-    const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
-    const selectedDayName = dayNames[new Date(date + 'T00:00:00').getDay()]
-    
-    const { data: schedule, error: scheduleError } = await supabase
-      .from("salon_schedule")
-      .select("open, close, active")
-      .eq("barbershop_id", barbershopId)
-      .eq("day", selectedDayName)
-      .single()
+    // Função unificada para verificar disponibilidade de horários para um barbeiro
+    export async function getAvailableTimeSlots(
+      barberId: string, 
+      serviceId: string, 
+      date: string, 
+      barbershopId: string
+    ): Promise<string[]> {
+      try {
+        // Mapeamento de dias da semana
+        const weekDays = [
+          { key: "sunday", label: "Domingo" },
+          { key: "monday", label: "Segunda" },
+          { key: "tuesday", label: "Terça" },
+          { key: "wednesday", label: "Quarta" },
+          { key: "thursday", label: "Quinta" },
+          { key: "friday", label: "Sexta" },
+          { key: "saturday", label: "Sábado" },
+        ]
+        
+        // 1. Buscar horário de funcionamento
+        const dayIndex = new Date(date + 'T00:00:00').getDay()
+        const selectedDayKey = weekDays[dayIndex].key
+        
+        console.log(`Buscando horário para o dia: ${selectedDayKey} (${weekDays[dayIndex].label})`)
+        
+        const { data: schedule, error: scheduleError } = await supabase
+          .from("salon_schedule")
+          .select("open, close, active")
+          .eq("barbershop_id", barbershopId)
+          .eq("day", selectedDayKey)
+          .single()
 
     if (scheduleError || !schedule?.active) {
-      console.log(`Barbearia fechada no ${selectedDayName}`)
+      console.log(`Barbearia fechada no ${weekDays[dayIndex].label}`)
       return []
     }
 
