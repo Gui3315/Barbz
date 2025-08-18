@@ -137,32 +137,44 @@ export default function Agendamentos() {
   // Buscar dados do Supabase
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      // Buscar barbeiros
-      const { data: barbersData } = await supabase.from("barbers").select("*")
-      setBarbers((barbersData || []).map((b: any) => ({ id: b.id, name: b.name })))
-      // Buscar serviços
-      const { data: servicesData } = await supabase.from("services").select("*")
-      setServices(
-        (servicesData || []).map((s: any) => ({
-          id: s.id,
-          name: s.name,
-          duration_minutes: s.duration_minutes,
-          price: s.price,
-        })),
-      )
-
-
-      // Buscar barbershop_id do usuário logado
-      const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
-      let barbershopId = null
-      if (user) {
-        const { data: barbershop } = await supabase.from("barbershops").select("id").eq("owner_id", user.id).single()
-        if (barbershop) {
-          barbershopId = barbershop.id
-        }
+  const fetchData = async () => {
+    setLoading(true)
+    
+    // PRIMEIRO: Buscar barbershop_id do usuário logado
+    const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
+    let barbershopId = null
+    if (user) {
+      const { data: barbershop } = await supabase.from("barbershops").select("id").eq("owner_id", user.id).single()
+      if (barbershop) {
+        barbershopId = barbershop.id
       }
+    }
+
+    // DEPOIS: Buscar barbeiros da barbearia
+    let barbersData = []
+    if (barbershopId) {
+      const { data } = await supabase.from("barbers").select("*").eq("barbershop_id", barbershopId)
+      barbersData = data || []
+    }
+    setBarbers(barbersData.map((b: any) => ({ id: b.id, name: b.name })))
+
+    // DEPOIS: Buscar serviços da barbearia
+    let servicesData = []
+    if (barbershopId) {
+      const { data } = await supabase.from("services").select("*").eq("barbershop_id", barbershopId)
+      servicesData = data || []
+    }
+    setServices(
+      servicesData.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        duration_minutes: s.duration_minutes,
+        price: s.price,
+      })),
+    )
+
+
+      
 
       // Buscar agendamentos do dia via função RPC (resolve RLS)
       let appointmentsData = []
@@ -215,16 +227,28 @@ export default function Agendamentos() {
   }
 
   const handleCreateAppointment = async () => {
-    if (!clientName.trim() || !clientPhone.trim() || !selectedBarber || !selectedService || !selectedTime || !newAppointmentDate) {
-      toast({
-        title: "Campos obrigatórios",
-        description: "Preencha todos os campos obrigatórios.",
-        variant: "destructive",
-      })
-      return
-    }
-    // Buscar usuário logado
-    const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
+  if (!clientName.trim() || !clientPhone.trim() || !selectedBarber || !selectedService || !selectedTime || !newAppointmentDate) {
+    toast({
+      title: "Campos obrigatórios",
+      description: "Preencha todos os campos obrigatórios.",
+      variant: "destructive",
+    })
+    return
+  }
+
+  // VALIDAÇÃO ADICIONAL: Verificar se o barbeiro pertence à barbearia
+  const selectedBarberObj = barbers.find(b => b.id === selectedBarber)
+  if (!selectedBarberObj) {
+    toast({
+      title: "Erro de validação",
+      description: "Barbeiro não encontrado ou não pertence à sua barbearia.",
+      variant: "destructive",
+    })
+    return
+  }
+
+  // Buscar usuário logado
+  const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
     const user_id = user?.id || null
     if (!user_id) {
       toast({

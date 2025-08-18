@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
+import { getOccupiedSlots } from "@/utils/availabilityUtils"
 import { Link } from "react-router-dom"
 import { getAvailableTimeSlots, getAvailableBarbersForSlot } from "@/utils/availabilityUtils"
 import { ClientLayout } from "@/components/client/layout"
@@ -104,6 +105,9 @@ const filterServicesForTimeSlot = async (timeSlot: string) => {
 
   console.log("Schedule:", schedule)
 
+  // Primeiro, buscar horários ocupados do barbeiro para a data
+  const occupied = await getOccupiedSlots(selectedBarber.id, selectedDate)
+
   const filtered = services.filter((service) => {
     console.log(`Verificando serviço: ${service.name} (${service.duration_minutes}min)`)
     const serviceEndMinutes = slotMinutes + service.duration_minutes
@@ -127,10 +131,6 @@ const filterServicesForTimeSlot = async (timeSlot: string) => {
       const lunchStartMinutes = lunchStartH * 60 + lunchStartM
       const lunchEndMinutes = lunchEndH * 60 + lunchEndM
       
-      console.log(`Almoço: ${lunchStartMinutes} - ${lunchEndMinutes} minutos`)
-      console.log(`Serviço: ${slotMinutes} - ${serviceEndMinutes} minutos`)
-      
-      // Verificar se há sobreposição: serviço não pode começar antes do fim do almoço E terminar depois do início do almoço
       const hasOverlap = !(serviceEndMinutes <= lunchStartMinutes || slotMinutes >= lunchEndMinutes)
       
       if (hasOverlap) {
@@ -139,9 +139,31 @@ const filterServicesForTimeSlot = async (timeSlot: string) => {
       }
     }
 
+    // NOVO: Verificar se o serviço cabe nos slots livres (ocupados)
+    const slotsNeeded = Math.ceil(service.duration_minutes / 30)
+    let canFit = true
+    let currentMinutes = slotMinutes
+
+    for (let i = 0; i < slotsNeeded; i++) {
+      const checkHour = Math.floor(currentMinutes / 60)
+      const checkMin = currentMinutes % 60
+      const checkTimeStr = `${checkHour.toString().padStart(2,'0')}:${checkMin.toString().padStart(2,'0')}`
+
+      if (occupied.has(checkTimeStr)) {
+        console.log(`❌ Não cabe: conflito com agendamento existente em ${checkTimeStr}`)
+        canFit = false
+        break
+      }
+
+      currentMinutes += 30
+    }
+
+    if (!canFit) return false
+
     console.log(`✅ Serviço OK`)
     return true
   })
+
 
   console.log("Serviços filtrados:", filtered)
   setFilteredServices(filtered)
