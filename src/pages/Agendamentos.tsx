@@ -1,6 +1,7 @@
 "use client"
 
 import { DashboardLayout } from "@/components/dashboard/layout"
+import { getAvailableTimeSlots } from "@/utils/availabilityUtils"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -51,8 +52,6 @@ interface Service {
   price: string
 }
 
-import { salonSchedule, generateTimeSlots } from "@/config/salonSchedule"
-
 export default function Agendamentos() {
   const { toast } = useToast()
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date())
@@ -86,119 +85,54 @@ export default function Agendamentos() {
   const [loadingTimes, setLoadingTimes] = useState(false)
   // Função para gerar horários disponíveis considerando agendamentos existentes
   useEffect(() => {
-  const fetchAvailableTimes = async () => {
-    setLoadingTimes(true)
-    setAvailableTimes([])
-    if (!newAppointmentDate || !selectedBarber || !selectedService) {
+    const fetchAvailableTimes = async () => {
+      setLoadingTimes(true)
+      setAvailableTimes([])
+      
+      if (!newAppointmentDate || !selectedBarber || !selectedService) {
         setLoadingTimes(false)
         return
       }
       
-      // Buscar barbershop_id
-      const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
-      let barbershopId = null
-      if (user) {
-        const { data: barbershop } = await supabase.from("barbershops").select("id").eq("owner_id", user.id).single()
-        if (barbershop) {
-          barbershopId = barbershop.id
-        }
-      }
-
-      if (!barbershopId) {
-        setAvailableTimes([])
-        setLoadingTimes(false)
-        return
-      }
-
-      // Buscar duração do serviço
-      const service = services.find((s) => s.id === selectedService)
-      const duration = service ? service.duration_minutes : 30
-      
-      // Buscar configuração do dia da tabela salon_schedule
-      const diasSemana = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"]
-      const diaSelecionado = diasSemana[newAppointmentDate.getDay()]
-
-      const { data: scheduleData } = await supabase
-        .from("salon_schedule")
-        .select("open, close, active")
-        .eq("barbershop_id", barbershopId)
-        .eq("day", diaSelecionado)
-        .single()
-
-      if (!scheduleData || !scheduleData.active) {
-        setAvailableTimes([])
-        setLoadingTimes(false)
-        return
-      }
-
-      const slots = generateTimeSlots(scheduleData.open, scheduleData.close)
-
-      // Buscar agendamentos do barbeiro para o dia (corrigindo para UTC-3)
-      const year = newAppointmentDate.getFullYear()
-      const month = String(newAppointmentDate.getMonth() + 1).padStart(2, "0")
-      const day = String(newAppointmentDate.getDate()).padStart(2, "0")
-      const startUTC = `${year}-${month}-${day}T03:00:00+00:00` // 00:00 BRT = 03:00 UTC
-      const nextDay = new Date(newAppointmentDate.getTime() + 24 * 60 * 60 * 1000)
-      const nextYear = nextDay.getFullYear()
-      const nextMonth = String(nextDay.getMonth() + 1).padStart(2, "0")
-      const nextDayStr = String(nextDay.getDate()).padStart(2, "0")
-      const endUTC = `${nextYear}-${nextMonth}-${nextDayStr}T02:59:59+00:00`
-      const { data: dayAppointments, error } = await supabase
-        .from("appointments")
-        .select("*")
-        .eq("barber_id", selectedBarber)
-        .gte("start_at", startUTC)
-        .lt("start_at", endUTC)
-        .in("status", ["confirmed", "pending"])
-
-      if (error) {
-        setAvailableTimes(slots)
-        setLoadingTimes(false)
-        return
-      }
-      // Marcar horários ocupados
-      const occupied: Set<string> = new Set()
-      ;(dayAppointments || []).forEach((appt: any) => {
-        // Extrair hora diretamente da string, sem conversão de timezone
-        const apptTimeSlot = appt.start_at.substring(11, 16) // Pega HH:MM diretamente
-        
-        // Marcar esse horário como ocupado
-        occupied.add(apptTimeSlot)
-      })
-
-      // Filtrar slots disponíveis considerando duração do serviço
-      const available = slots.filter((slot) => {
-        if (occupied.has(slot)) return false
-        
-        const [slotHour, slotMin] = slot.split(":").map(Number)
-        const [closeHour, closeMin] = scheduleData.close.split(":").map(Number)
-        
-        // Calcular horário de fim do serviço
-        const slotEndTime = slotHour * 60 + slotMin + duration // em minutos
-        const closeTime = closeHour * 60 + closeMin // em minutos
-        
-        // Verificar se o serviço cabe no horário de funcionamento
-        if (slotEndTime > closeTime) return false
-        
-        // Verificar se há conflito com agendamentos existentes durante toda a duração do serviço
-        const slotStartTime = slotHour * 60 + slotMin
-        for (let time = slotStartTime; time < slotEndTime; time += 30) { // verificar a cada 30 min
-          const checkHour = Math.floor(time / 60).toString().padStart(2, '0')
-          const checkMin = (time % 60).toString().padStart(2, '0')
-          const checkSlot = `${checkHour}:${checkMin}`
-          
-          if (occupied.has(checkSlot)) {
-            return false // há conflito durante a duração do serviço
+      try {
+        // Buscar barbershop_id
+        const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
+        let barbershopId = null
+        if (user) {
+          const { data: barbershop } = await supabase.from("barbershops").select("id").eq("owner_id", user.id).single()
+          if (barbershop) {
+            barbershopId = barbershop.id
           }
         }
+
+        if (!barbershopId) {
+          setAvailableTimes([])
+          setLoadingTimes(false)
+          return
+        }
+
+        // Formato da data para a função (YYYY-MM-DD)
+        const dateString = format(newAppointmentDate, "yyyy-MM-dd")
         
-        return true
-      })
-      setAvailableTimes(available)
-      setLoadingTimes(false)
+        // Usar a função unificada do availabilityUtils
+        const availableSlots = await getAvailableTimeSlots(
+          selectedBarber,
+          selectedService,
+          dateString,
+          barbershopId
+        )
+        
+        setAvailableTimes(availableSlots)
+        setLoadingTimes(false)
+      } catch (error) {
+        console.error("Erro ao buscar horários disponíveis:", error)
+        setAvailableTimes([])
+        setLoadingTimes(false)
+      }
     }
+    
     fetchAvailableTimes()
-  }, [newAppointmentDate, selectedBarber, selectedService, services])
+  }, [newAppointmentDate, selectedBarber, selectedService])
 
   // Buscar dados do Supabase
 
