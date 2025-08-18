@@ -9,7 +9,7 @@ import { Link } from "react-router-dom"
 import { getAvailableTimeSlots, getAvailableBarbersForSlot } from "@/utils/availabilityUtils"
 import { ClientLayout } from "@/components/client/layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, User, LogOut, Camera, Save, Clock, Scissors, MapPin, CheckCircle } from "lucide-react"
+import { Calendar, User, LogOut, Camera, Save, Clock, Scissors, MapPin, CheckCircle, History, ClockIcon, X } from "lucide-react"
 
 // Função para gerar slots de horário baseado no horário de abertura e fechamento
 function generateTimeSlots(openTime: string, closeTime: string, intervalMinutes = 30): string[] {
@@ -44,7 +44,7 @@ const createLocalDateTime = (date, time) => {
 export default function Cliente() {
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const [activeTab, setActiveTab] = useState("agendamento")
+  const [activeTab, setActiveTab] = useState("meus-agendamentos")
   const [clientData, setClientData] = useState<any>(null)
   const [profileData, setProfileData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -71,6 +71,79 @@ export default function Cliente() {
   const [availableBarbers, setAvailableBarbers] = useState<any[]>([])
   const [filteredServices, setFilteredServices] = useState<any[]>([])
   const [bookingLoading, setBookingLoading] = useState(false)
+  // Estado para aba "Meus Agendamentos"
+  const [userAppointments, setUserAppointments] = useState<any[]>([])
+  const [appointmentsLoading, setAppointmentsLoading] = useState(false)
+
+  // Buscar agendamentos do usuário
+  const fetchUserAppointments = async () => {
+    console.log("=== DEBUG FETCH APPOINTMENTS ===")
+    
+    const clientId = profileData?.id;
+    
+    if (!clientId) {
+      console.log("❌ Saindo - sem ID do cliente")
+      return
+    }
+    
+    try {
+      setAppointmentsLoading(true)
+      
+      console.log("Buscando agendamentos para cliente ID:", clientId)
+      
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const { data, error } = await supabase
+        .from("appointments")
+        .select(`
+          *,
+          barbers (name, phone),
+          barbershops (name),
+          appointment_services (
+            name_snapshot,
+            price_snapshot,
+            duration_minutes_snapshot
+          )
+        `)
+        .eq("client_id", clientId)
+        .gte("start_at", todayStart.toISOString())
+        .order("start_at", { ascending: true })
+
+      if (error) throw error;
+      
+      console.log("Dados retornados:", data);
+      setUserAppointments(data || []);
+      console.log("=================================")
+      
+    } catch (error) {
+      console.error("Erro ao buscar agendamentos:", error)
+      setUserAppointments([]);
+    } finally {
+      setAppointmentsLoading(false)
+    }
+  }
+
+// Cancelar agendamento
+const cancelAppointment = async (appointmentId: string) => {
+  if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return
+  
+  try {
+    const { error } = await supabase
+      .from("appointments")
+      .update({ status: "cancelled" })
+      .eq("id", appointmentId)
+    
+    if (error) throw error
+    
+    alert("Agendamento cancelado com sucesso!")
+    fetchUserAppointments() // Recarregar lista
+    
+  } catch (error) {
+    console.error("Erro ao cancelar agendamento:", error)
+    alert("Erro ao cancelar agendamento. Tente novamente.")
+  }
+}
 
 // Função para filtrar serviços baseado no horário selecionado
 const filterServicesForTimeSlot = async (timeSlot: string) => {
@@ -354,7 +427,7 @@ if (!clientData?.id && !profileData?.id) {
         .eq("barber_id", selectedBarber.id)
         .lte("start_at", endDateTime.toISOString())
         .gte("end_at", startDateTime.toISOString())
-        .in("status", ["confirmed", "pending"]);
+        .eq("status", "confirmed");
       
       if (conflictCheck && conflictCheck.length > 0) {
         alert("Este horário não está mais disponível. Por favor, escolha outro horário.");
@@ -373,12 +446,12 @@ if (!clientData?.id && !profileData?.id) {
         .insert({
           barber_id: selectedBarber.id,
           barbershop_id: selectedBarbershop.id,
-          client_id: clientData?.id || profileData?.id,
+          client_id: profileData?.id,
           start_at: startDateTimeUTC.toISOString(),
           end_at: endDateTime.toISOString(),
-          status: "pending",
+          status: "confirmed",
           total_price: selectedService.price,
-          user_id: clientData?.user_id || profileData?.id
+          user_id: profileData?.id
         })
         .select()
         .single()
@@ -397,7 +470,10 @@ if (!clientData?.id && !profileData?.id) {
         })
 
       alert("Agendamento realizado com sucesso!")
-      
+
+      // Recarregar a lista de agendamentos
+      fetchUserAppointments()
+
       // Reset form
       setBookingStep("barbershop")
       setBookingMethod("")
@@ -408,6 +484,9 @@ if (!clientData?.id && !profileData?.id) {
       setSelectedTime("")
       setAvailableSlots([])
       setAvailableBarbers([])
+
+      // Voltar para a aba "Meus Agendamentos" para mostrar o novo agendamento
+      setActiveTab("meus-agendamentos")
       
     } catch (error) {
       console.error("Erro ao confirmar agendamento:", error)
@@ -437,44 +516,47 @@ if (!clientData?.id && !profileData?.id) {
   }, [])
 
   useEffect(() => {
-    let isMounted = true;
-    async function fetchClientAndProfile() {
-      setLoading(true);
-      const {
-        data: { user },
-        error: userError
-      } = await supabase.auth.getUser();
-      if (!user || userError) {
-        // Sessão inválida ou expirada: forçar logout e redirecionar
-        await supabase.auth.signOut();
-        if (isMounted) navigate("/login", { replace: true });
-        return;
-      }
-      // Buscar todos os dados relevantes do perfil do cliente
-      const [{ data: client, error: clientError }, { data: profile, error: profileError }] = await Promise.all([
-        supabase.from("clients").select("*").eq("user_id", user.id).single(),
-        supabase
-          .from("profiles")
-          .select("id, user_name, email, phone, profile_photo_url")
-          .match({ id: user.id, user_type: "cliente" })
-          .single(),
-      ]);
-      if (clientError?.message === "JWT expired" || profileError?.message === "JWT expired") {
-        await supabase.auth.signOut();
-        if (isMounted) navigate("/login", { replace: true });
-        return;
-      }
-      setClientData(client || null);
-      setProfileData(profile || null);
-      // Preencher campos editáveis
-      setClientName(profile?.user_name || "");
-      setClientEmail(profile?.email || "");
-      setClientPhone(profile?.phone || "");
-      setLoading(false);
+  let isMounted = true;
+  async function fetchClientAndProfile() {
+    setLoading(true);
+    const {
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser();
+    if (!user || userError) {
+      await supabase.auth.signOut();
+      if (isMounted) navigate("/login", { replace: true });
+      return;
     }
-    fetchClientAndProfile();
-    return () => { isMounted = false; };
-  }, [navigate]);
+    
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, user_name, email, phone, profile_photo_url")
+      .match({ id: user.id, user_type: "cliente" })
+      .single();
+      
+    if (profileError?.message === "JWT expired") {
+      await supabase.auth.signOut();
+      if (isMounted) navigate("/login", { replace: true });
+      return;
+    }
+    
+    setClientData(null);
+    setProfileData(profile || null);
+    setClientName(profile?.user_name || "");
+    setClientEmail(profile?.email || "");
+    setClientPhone(profile?.phone || "");
+    setLoading(false);
+  }
+  fetchClientAndProfile();
+  return () => { isMounted = false; };
+}, [navigate]);
+
+useEffect(() => {
+  if (profileData?.id) {
+    fetchUserAppointments();
+  }
+}, [profileData?.id]);
 
   return (
     <ClientLayout>
@@ -510,23 +592,156 @@ if (!clientData?.id && !profileData?.id) {
           </div>
 
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/20 shadow-xl overflow-hidden">
-            <Tabs defaultValue="agendamento" value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="w-full grid grid-cols-2 bg-slate-100/50 p-2 rounded-none">
+            <Tabs defaultValue="meus-agendamentos" value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="w-full grid grid-cols-3 bg-slate-100/50 p-1 sm:p-2 rounded-none">
+                <TabsTrigger
+                  value="meus-agendamentos"
+                  className="flex flex-col sm:flex-row gap-1 sm:gap-3 items-center py-2 px-1 sm:py-3 sm:px-6 rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-slate-800 transition-all duration-200"
+                >
+                  <ClockIcon size={16} className="sm:size-5" />
+                  <span className="font-medium text-xs sm:text-sm text-center">Meus Agendamentos</span>
+                </TabsTrigger>                
                 <TabsTrigger
                   value="agendamento"
-                  className="flex gap-3 items-center py-3 px-6 rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-slate-800 transition-all duration-200"
+                  className="flex flex-col sm:flex-row gap-1 sm:gap-3 items-center py-2 px-1 sm:py-3 sm:px-6 rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-slate-800 transition-all duration-200"
                 >
-                  <Calendar size={20} />
-                  <span className="font-medium">Agendamento</span>
+                  <Calendar size={16} className="sm:size-5" />
+                  <span className="font-medium text-xs sm:text-sm">Agendamento</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value="perfil"
-                  className="flex gap-3 items-center py-3 px-6 rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-slate-800 transition-all duration-200"
+                  className="flex flex-col sm:flex-row gap-1 sm:gap-3 items-center py-2 px-1 sm:py-3 sm:px-6 rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-md data-[state=active]:text-slate-800 transition-all duration-200"
                 >
-                  <User size={20} />
-                  <span className="font-medium">Perfil</span>
+                  <User size={16} className="sm:size-5" />
+                  <span className="font-medium text-xs sm:text-sm">Perfil</span>
                 </TabsTrigger>
               </TabsList>
+
+              <TabsContent value="meus-agendamentos" className="p-6">
+              <div className="space-y-6">
+                <div className="text-center space-y-2">
+                  <h2 className="text-2xl font-bold text-slate-800">Meus Agendamentos</h2>
+                  <p className="text-slate-600">Visualize e gerencie seus próximos horários</p>
+                </div>
+
+                {appointmentsLoading ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="text-slate-600 mt-4">Carregando seus agendamentos...</p>
+                  </div>
+                ) : userAppointments.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Calendar size={48} className="mx-auto mb-4 text-slate-400" />
+                    <h3 className="text-lg font-semibold text-slate-800 mb-2">Nenhum agendamento encontrado</h3>
+                    <p className="text-slate-600 mb-6">Você ainda não possui agendamentos futuros.</p>
+                    <button
+                      onClick={() => setActiveTab("agendamento")}
+                      className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
+                    >
+                      Agendar Horário
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {userAppointments.map((appointment) => {
+                      const startDate = new Date(appointment.start_at.substring(0, 19))
+                      const service = appointment.appointment_services?.[0]
+                      const status = appointment.status
+                      const isPending = status === "pending"
+                      const isConfirmed = status === "confirmed"
+                      const isCancelled = status === "cancelled"
+                      
+                      // Verificar se pode cancelar (até 2 horas antes)
+                      const canCancel = !isCancelled && new Date(startDate.getTime() - 2 * 60 * 60 * 1000) > new Date()
+                      
+                      return (
+                        <div
+                          key={appointment.id}
+                          className={`bg-white rounded-xl border-2 p-6 shadow-lg transition-all duration-200 ${
+                            isCancelled 
+                              ? "border-red-200 bg-red-50" 
+                              : isConfirmed 
+                                ? "border-green-200 bg-green-50" 
+                                : "border-amber-200 bg-amber-50"
+                          }`}
+                        >
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="text-lg font-semibold text-slate-800">
+                                  {appointment.barbershops?.name}
+                                </h3>
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  isCancelled 
+                                    ? "bg-red-100 text-red-700"
+                                    : isConfirmed 
+                                      ? "bg-green-100 text-green-700"
+                                      : "bg-amber-100 text-amber-700"
+                                }`}>
+                                  {isCancelled ? "Cancelado" : isConfirmed ? "Confirmado" : "Pendente"}
+                                </span>
+                              </div>
+                              <p className="text-slate-600">
+                                {startDate.toLocaleDateString('pt-BR', { 
+                                  weekday: 'long', 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}
+                              </p>
+                            </div>
+                            
+                            {canCancel && (
+                              <button
+                                onClick={() => cancelAppointment(appointment.id)}
+                                className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors duration-200"
+                                title="Cancelar agendamento"
+                              >
+                                <X size={20} />
+                              </button>
+                            )}
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                            <div className="space-y-1">
+                              <p className="text-slate-500">Horário</p>
+                              <p className="font-semibold text-slate-800">
+                                {startDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <p className="text-slate-500">Barbeiro</p>
+                              <p className="font-semibold text-slate-800">
+                                {appointment.barbers?.name || "Não informado"}
+                              </p>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <p className="text-slate-500">Serviço</p>
+                              <p className="font-semibold text-slate-800">
+                                {service?.name_snapshot || "Serviço não informado"}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {service && (
+                            <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center">
+                              <span className="text-slate-600">
+                                Duração: {service.duration_minutes_snapshot} min
+                              </span>
+                              <span className="text-lg font-bold text-green-600">
+                                R$ {service.price_snapshot?.toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
 
               <TabsContent value="agendamento" className="p-6">
                 <div className="space-y-6">
