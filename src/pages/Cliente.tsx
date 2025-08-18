@@ -68,7 +68,85 @@ export default function Cliente() {
   const [barbers, setBarbers] = useState<any[]>([])
   const [availableSlots, setAvailableSlots] = useState<string[]>([])
   const [availableBarbers, setAvailableBarbers] = useState<any[]>([])
+  const [filteredServices, setFilteredServices] = useState<any[]>([])
   const [bookingLoading, setBookingLoading] = useState(false)
+
+// Função para filtrar serviços baseado no horário selecionado
+const filterServicesForTimeSlot = async (timeSlot: string) => {
+  console.log("=== FILTRAR SERVIÇOS ===")
+  console.log("TimeSlot:", timeSlot)
+  console.log("SelectedBarber:", selectedBarber?.name)
+  console.log("SelectedBarbershop:", selectedBarbershop?.name)
+  console.log("SelectedDate:", selectedDate)
+  console.log("Services disponíveis:", services)
+  
+  if (!selectedBarber || !selectedBarbershop || !selectedDate) {
+    console.log("Dados faltando, saindo...")
+    return
+  }
+
+  const [slotH, slotM] = timeSlot.split(':').map(Number)
+  const slotMinutes = slotH * 60 + slotM
+  console.log("Slot em minutos:", slotMinutes)
+
+  // Buscar horário de funcionamento
+  const dayIndex = new Date(selectedDate + 'T00:00:00').getDay()
+  const weekDays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+  const selectedDayKey = weekDays[dayIndex]
+  console.log("Dia da semana:", selectedDayKey)
+  
+  const { data: schedule } = await supabase
+    .from("salon_schedule")
+    .select("close")
+    .eq("barbershop_id", selectedBarbershop.id)
+    .eq("day", selectedDayKey)
+    .single()
+
+  console.log("Schedule:", schedule)
+
+  const filtered = services.filter((service) => {
+    console.log(`Verificando serviço: ${service.name} (${service.duration_minutes}min)`)
+    const serviceEndMinutes = slotMinutes + service.duration_minutes
+    console.log(`Termina em: ${serviceEndMinutes} minutos`)
+
+    // Verificar se cabe até o fechamento
+    if (schedule?.close) {
+      const [closeH, closeM] = schedule.close.split(':').map(Number)
+      const closeMinutes = closeH * 60 + closeM
+      console.log(`Fechamento: ${closeMinutes} minutos`)
+      if (serviceEndMinutes > closeMinutes) {
+        console.log(`❌ Não cabe até fechamento (termina ${serviceEndMinutes}, fecha ${closeMinutes})`)
+        return false
+      }
+    }
+
+    // Verificar se conflita com horário de almoço
+    if (selectedBarber?.lunch_start && selectedBarber?.lunch_end) {
+      const [lunchStartH, lunchStartM] = selectedBarber.lunch_start.split(':').map(Number)
+      const [lunchEndH, lunchEndM] = selectedBarber.lunch_end.split(':').map(Number)
+      const lunchStartMinutes = lunchStartH * 60 + lunchStartM
+      const lunchEndMinutes = lunchEndH * 60 + lunchEndM
+      
+      console.log(`Almoço: ${lunchStartMinutes} - ${lunchEndMinutes} minutos`)
+      console.log(`Serviço: ${slotMinutes} - ${serviceEndMinutes} minutos`)
+      
+      // Verificar se há sobreposição: serviço não pode começar antes do fim do almoço E terminar depois do início do almoço
+      const hasOverlap = !(serviceEndMinutes <= lunchStartMinutes || slotMinutes >= lunchEndMinutes)
+      
+      if (hasOverlap) {
+        console.log(`❌ Conflito com horário de almoço`)
+        return false
+      }
+    }
+
+    console.log(`✅ Serviço OK`)
+    return true
+  })
+
+  console.log("Serviços filtrados:", filtered)
+  setFilteredServices(filtered)
+  console.log("======================")
+}
 
   // Buscar barbearias
   const fetchBarbershops = async () => {
@@ -185,15 +263,14 @@ const fetchAvailableSlotsForBarber = async (barberId: string, date: string) => {
   
   try {
     setBookingLoading(true)
-    const allSlotsSet = new Set<string>()
     
-    for (const service of services) {
-      const slots = await getAvailableTimeSlots(barberId, service.id, date, selectedBarbershop.id)
-      slots.forEach(slot => allSlotsSet.add(slot))
-    }
+    // Para o fluxo por barbeiro, buscar slots do serviço mais curto (30 min)
+    const shortestService = services.reduce((min, service) => 
+      service.duration_minutes < min.duration_minutes ? service : min
+    )
     
-    const allSlots = Array.from(allSlotsSet).sort()
-    setAvailableSlots(allSlots)
+    const slots = await getAvailableTimeSlots(barberId, shortestService.id, date, selectedBarbershop.id)
+    setAvailableSlots(slots)
     
   } catch (error) {
     console.error("Erro ao buscar horários:", error)
@@ -723,14 +800,15 @@ if (!clientData?.id && !profileData?.id) {
                                   <button
                                     key={time}
                                     onClick={() => {
-                                      setSelectedTime(time)
-                                      if (bookingMethod === "by-time") {
-                                        fetchAvailableBarbers(time)
-                                        setBookingStep("confirm")
-                                      } else {
-                                        setBookingStep("service-selection")
-                                      }
-                                    }}
+                                    setSelectedTime(time)
+                                    if (bookingMethod === "by-time") {
+                                      fetchAvailableBarbers(time)
+                                      setBookingStep("confirm")
+                                    } else {
+                                      filterServicesForTimeSlot(time)
+                                      setBookingStep("service-selection")
+                                    }
+                                  }}
                                     className="p-3 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 text-center font-medium"
                                   >
                                     {time}
@@ -847,8 +925,15 @@ if (!clientData?.id && !profileData?.id) {
                           </span>
                         </h3>
                         
+                        {filteredServices.length === 0 ? (
+                        <div className="text-center py-8 text-slate-600">
+                          <Scissors size={32} className="mx-auto mb-2 text-slate-400" />
+                          <p>Nenhum serviço cabe no horário selecionado.</p>
+                          <p className="text-sm">Tente selecionar outro horário.</p>
+                        </div>
+                      ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                          {services.map((service) => (
+                          {filteredServices.map((service) => (
                             <button
                               key={service.id}
                               onClick={() => {
@@ -878,7 +963,7 @@ if (!clientData?.id && !profileData?.id) {
                             </button>
                           ))}
                         </div>
-
+                        )}
                         {selectedService && (
                           <div className="bg-green-50 border border-green-200 rounded-lg p-6">
                             <h4 className="font-semibold text-slate-800 mb-4">Resumo do Agendamento</h4>
