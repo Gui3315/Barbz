@@ -11,12 +11,14 @@ interface AuthContextType {
   user: AuthUser | null;
   setUser: (user: AuthUser | null) => void;
   logout: () => Promise<void>;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Carrega usuário do localStorage na inicialização
   useEffect(() => {
@@ -30,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.removeItem('auth_user');
       }
     }
+    setLoading(false); // <-- Adicione aqui
   }, []);
 
   // Salva usuário no localStorage sempre que mudar
@@ -53,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, logout }}>
+    <AuthContext.Provider value={{ user, setUser, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

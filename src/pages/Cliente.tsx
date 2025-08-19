@@ -374,7 +374,7 @@ const cancelReschedule = () => {
       .select(`
         *,
         barbers (name, phone),
-        barbershops (name),
+        barbershops (name, min_hours_before_cancel, min_hours_before_reschedule),
         appointment_services (
           service_id,
           name_snapshot,
@@ -929,7 +929,12 @@ useEffect(() => {
                       const isCancelled = status === "cancelled"
                       
                       // Verificar se pode cancelar ou reagendar (até 2 horas antes)
-                      const canModify = !isCancelled && new Date(startDate.getTime() - 2 * 60 * 60 * 1000) > new Date()
+											const now = new Date()
+											const diffHours = (startDate.getTime() - now.getTime()) / (1000 * 60 * 60)
+											const minCancel = appointment.barbershops?.min_hours_before_cancel ?? 2
+											const minReschedule = appointment.barbershops?.min_hours_before_reschedule ?? 2
+											const canCancel = !isCancelled && diffHours >= minCancel
+											const canReschedule = !isCancelled && diffHours >= minReschedule
                       
                       return (
                         <div
@@ -968,31 +973,33 @@ useEffect(() => {
                               </p>
                             </div>
                             
-                            {canModify && (
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => {
-                                    const service = appointment.appointment_services?.[0]
-                                    if (!service?.service_id) {
-                                      alert("Erro: Não foi possível encontrar informações do serviço. Tente atualizar a página.")
-                                      return
-                                    }
-                                    startRescheduling(appointment)
-                                  }}
-                                  className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors duration-200"
-                                  title="Reagendar"
-                                >
-                                  <Calendar size={20} />
-                                </button>
-                                <button
-                                  onClick={() => cancelAppointment(appointment.id)}
-                                  className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors duration-200"
-                                  title="Cancelar agendamento"
-                                >
-                                  <X size={20} />
-                                </button>
-                              </div>
-                            )}
+                            <div className="flex gap-2">
+															{canReschedule && (
+																<button
+																	onClick={() => {
+																		const service = appointment.appointment_services?.[0]
+																		if (!service?.service_id) {
+																			alert("Erro: Não foi possível encontrar informações do serviço. Tente atualizar a página.")
+																			return
+																		}
+																		startRescheduling(appointment)
+																	}}
+																	className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors duration-200"
+																	title="Reagendar"
+																>
+																	<Calendar size={20} />
+																</button>
+															)}
+															{canCancel && (
+																<button
+																	onClick={() => cancelAppointment(appointment.id)}
+																	className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition-colors duration-200"
+																	title="Cancelar agendamento"
+																>
+																	<X size={20} />
+																</button>
+															)}
+														</div>
                           </div>
                           
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
@@ -1297,7 +1304,7 @@ useEffect(() => {
                       <div className="space-y-4">
                         <h3 className="text-lg font-semibold text-slate-800 mb-4">Escolha o serviço</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {services.map((service) => (
+                          {services.filter(service => !service.barber_only).map((service) => (
                             <button
                               key={service.id}
                               onClick={() => {

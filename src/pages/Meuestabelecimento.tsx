@@ -34,14 +34,22 @@ export default function MeuEstabelecimento() {
   const [services, setServices] = useState<any[]>([])
   const [loadingServices, setLoadingServices] = useState(true)
   const [barbershopId, setBarbershopId] = useState<string | null>(null)
+
+  //Politica de cancelamento e reagendamento
+  const [minHoursBeforeCancel, setMinHoursBeforeCancel] = useState<number>(24)
+  const [minHoursBeforeReschedule, setMinHoursBeforeReschedule] = useState<number>(24)
+  const [savingPolicy, setSavingPolicy] = useState(false)
+
   // Formulário de novo serviço
   const [newService, setNewService] = useState({
     name: "",
     description: "",
     price: "",
     duration_minutes: "",
+    barber_only: false,
   })
   const [addingService, setAddingService] = useState(false)
+
   // Edição de serviço
   const [editServiceId, setEditServiceId] = useState<string | null>(null)
   const [editService, setEditService] = useState<any>(null)
@@ -62,15 +70,16 @@ export default function MeuEstabelecimento() {
       duration_minutes: Number(newService.duration_minutes),
       barbershop_id: barbershopId,
       user_id: user?.id,
+      barber_only: newService.barber_only,
     })
     if (!error) {
       toast({ title: "Serviço cadastrado!" })
-      setNewService({ name: "", description: "", price: "", duration_minutes: "" })
+      setNewService({ name: "", description: "", price: "", duration_minutes: "", barber_only: false })
       // Atualiza lista
       setLoadingServices(true)
       const { data: servicesData } = await supabase
         .from("services")
-        .select("id, name, description, price, duration_minutes, created_at")
+        .select("id, name, description, price, duration_minutes, barber_only, created_at")
         .eq("barbershop_id", barbershopId)
         .order("created_at", { ascending: true })
       setServices(servicesData || [])
@@ -89,6 +98,7 @@ export default function MeuEstabelecimento() {
       description: service.description || "",
       price: service.price,
       duration_minutes: service.duration_minutes,
+      barber_only: service.barber_only || false, // <-- adicione aqui
     })
   }
 
@@ -103,6 +113,7 @@ export default function MeuEstabelecimento() {
         description: editService.description,
         price: Number(editService.price),
         duration_minutes: Number(editService.duration_minutes),
+        barber_only: editService.barber_only, // <-- adicione aqui
       })
       .eq("id", serviceId)
     if (!error) {
@@ -112,7 +123,7 @@ export default function MeuEstabelecimento() {
       setLoadingServices(true)
       const { data: servicesData } = await supabase
         .from("services")
-        .select("id, name, description, price, duration_minutes, created_at")
+        .select("id, name, description, price, duration_minutes, barber_only, created_at")
         .eq("barbershop_id", barbershopId)
         .order("created_at", { ascending: true })
       setServices(servicesData || [])
@@ -134,7 +145,7 @@ export default function MeuEstabelecimento() {
       setLoadingServices(true)
       const { data: servicesData } = await supabase
         .from("services")
-        .select("id, name, description, price, duration_minutes, created_at")
+        .select("id, name, description, price, duration_minutes, barber_only, created_at")
         .eq("barbershop_id", barbershopId)
         .order("created_at", { ascending: true })
       setServices(servicesData || [])
@@ -143,6 +154,42 @@ export default function MeuEstabelecimento() {
       toast({ title: "Erro ao remover serviço", description: error.message, variant: "destructive" })
     }
   }
+
+  // Handler para salvar política de reagendamento/cancelamento
+  const handleSavePolicy = async () => {
+    if (!barbershopId) return
+    setSavingPolicy(true)
+    const { error } = await supabase
+      .from("barbershops")
+      .update({
+        min_hours_before_cancel: minHoursBeforeCancel,
+        min_hours_before_reschedule: minHoursBeforeReschedule,
+      })
+      .eq("id", barbershopId)
+    setSavingPolicy(false)
+    if (!error) {
+      toast({ title: "Política de reagendamento/cancelamento salva!" })
+    } else {
+      toast({ title: "Erro ao salvar política", description: error.message, variant: "destructive" })
+    }
+  }
+
+  //Politica de cancelamento/reagendamento
+  useEffect(() => {
+  const fetchPolicy = async () => {
+    if (!barbershopId) return
+    const { data } = await supabase
+      .from("barbershops")
+      .select("min_hours_before_cancel, min_hours_before_reschedule")
+      .eq("id", barbershopId)
+      .maybeSingle()
+    if (data) {
+      setMinHoursBeforeCancel(data.min_hours_before_cancel ?? 24)
+      setMinHoursBeforeReschedule(data.min_hours_before_reschedule ?? 24)
+    }
+  }
+  if (barbershopId) fetchPolicy()
+}, [barbershopId])
 
   // Fetch barbers and services
   useEffect(() => {
@@ -175,7 +222,7 @@ export default function MeuEstabelecimento() {
       // Fetch services
       const { data: servicesData } = await supabase
         .from("services")
-        .select("id, name, description, price, duration_minutes, created_at")
+        .select("id, name, description, price, duration_minutes, barber_only, created_at")
         .eq("barbershop_id", shop.id)
         .order("created_at", { ascending: true })
       setServices(servicesData || [])
@@ -186,10 +233,10 @@ export default function MeuEstabelecimento() {
 
   // Add new barber
   const handleAddBarber = async () => {
-    if (!newBarberName) {
-      toast({ title: "Nome obrigatório", variant: "destructive" })
-      return
-    }
+  if (!newBarberName || !newBarberPhone || !newBarberLunchStart || !newBarberLunchEnd) {
+    toast({ title: "Preencha todos os campos obrigatórios", variant: "destructive" })
+    return
+  }
     // Get barbershop_id
     const { data: shop } = await supabase.from("barbershops").select("id").eq("owner_id", user?.id).maybeSingle()
     if (!shop) return
@@ -402,6 +449,7 @@ export default function MeuEstabelecimento() {
                       value={newBarberName}
                       onChange={(e) => setNewBarberName(e.target.value)}
                       className="border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                      required
                     />
                   </div>
                   <div>
@@ -412,6 +460,7 @@ export default function MeuEstabelecimento() {
                       onChange={(e) => setNewBarberPhone(maskPhone(e.target.value))}
                       maxLength={15}
                       className="border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                      required
                     />
                   </div>
                   <div>
@@ -421,6 +470,7 @@ export default function MeuEstabelecimento() {
                       value={newBarberLunchStart || ""}
                       onChange={(e) => setNewBarberLunchStart(e.target.value)}
                       className="border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                      required
                     />
                   </div>
                   <div>
@@ -430,6 +480,7 @@ export default function MeuEstabelecimento() {
                       value={newBarberLunchEnd || ""}
                       onChange={(e) => setNewBarberLunchEnd(e.target.value)}
                       className="border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                      required
                     />
                   </div>
                   <div>
@@ -735,6 +786,16 @@ export default function MeuEstabelecimento() {
                       className="border-slate-200 focus:border-slate-500 focus:ring-slate-500"
                     />
                   </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="barberOnly"
+                      checked={newService.barber_only}
+                      onChange={e => setNewService(s => ({ ...s, barber_only: e.target.checked }))}
+                      className="w-4 h-4"
+                    />
+                    <label htmlFor="barberOnly" className="text-sm text-slate-700">Somente eu posso ver</label>
+                  </div>
                   <Button
                     onClick={handleAddService}
                     disabled={addingService}
@@ -765,6 +826,7 @@ export default function MeuEstabelecimento() {
                           <th className="text-left py-3 px-4 font-semibold text-slate-700">Descrição</th>
                           <th className="text-center py-3 px-4 font-semibold text-slate-700">Valor</th>
                           <th className="text-center py-3 px-4 font-semibold text-slate-700">Duração</th>
+                          <th className="text-center py-3 px-4 font-semibold text-slate-700">Exclusivo?</th>
                           <th className="text-center py-3 px-4 font-semibold text-slate-700">Ações</th>
                         </tr>
                       </thead>
@@ -814,6 +876,20 @@ export default function MeuEstabelecimento() {
                                   />
                                 </td>
                                 <td className="py-4 px-4">
+                              <div className="flex items-center gap-2 justify-center">
+                                <input
+                                  type="checkbox"
+                                  id={`barberOnlyEdit-${service.id}`}
+                                  checked={editService?.barber_only || false}
+                                  onChange={e => setEditService((s: any) => ({ ...s, barber_only: e.target.checked }))}
+                                  className="w-4 h-4"
+                                />
+                                <label htmlFor={`barberOnlyEdit-${service.id}`} className="text-xs text-slate-700">
+                                  Exclusivo do barbeiro
+                                </label>
+                              </div>
+                            </td>
+                                <td className="py-4 px-4">
                                   <div className="flex gap-2 justify-center">
                                     <Button
                                       size="sm"
@@ -843,6 +919,14 @@ export default function MeuEstabelecimento() {
                                 <td className="py-4 px-4 text-slate-600">{service.description}</td>
                                 <td className="py-4 px-4 text-center font-semibold text-green-600">
                                   R$ {Number(service.price).toFixed(2)}
+                                </td>
+                                <td className="py-4 px-4 text-center text-slate-600">{service.duration_minutes} min</td>
+                                <td className="py-4 px-4 text-center">
+                                  {service.barber_only ? (
+                                    <span title="Exclusivo do barbeiro" className="text-blue-600 font-bold">✔️</span>
+                                  ) : (
+                                    <span title="Visível para todos" className="text-slate-400">—</span>
+                                  )}
                                 </td>
                                 <td className="py-4 px-4 text-center text-slate-600">{service.duration_minutes} min</td>
                                 <td className="py-4 px-4">
@@ -875,6 +959,60 @@ export default function MeuEstabelecimento() {
                 )}
               </div>
             </div>
+            
+            <div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-xl overflow-hidden">
+              <div className="bg-gradient-to-r from-amber-700 to-blue-700 p-6">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center"></div>
+                  Política de Reagendamento/Cancelamento
+                </h2>
+              </div>
+              <div className="p-6">
+                <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSavePolicy(); }}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Horas mínimas para <span className="font-semibold text-blue-700">reagendar</span>
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={minHoursBeforeReschedule}
+                        onChange={e => setMinHoursBeforeReschedule(Number(e.target.value))}
+                        className="border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-2">
+                        Horas mínimas para <span className="font-semibold text-amber-700">cancelar</span>
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={minHoursBeforeCancel}
+                        onChange={e => setMinHoursBeforeCancel(Number(e.target.value))}
+                        className="border-slate-200 focus:border-amber-500 focus:ring-amber-500"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-4">
+                  Defina quantas horas de antecedência o cliente precisa para reagendar ou cancelar um agendamento.
+                </div>
+                  <div className="pt-4">
+                    <Button
+                      type="submit"
+                      disabled={savingPolicy}
+                      className="bg-gradient-to-r from-amber-700 to-blue-700 hover:from-blue-800 hover:to-blue-900 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+                    >
+                      {savingPolicy ? "Salvando..." : "Salvar Política"}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
           </div>
         </div>
       </DashboardLayout>
