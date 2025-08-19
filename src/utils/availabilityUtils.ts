@@ -87,8 +87,9 @@ export async function getOccupiedSlots(barberId: string, date: string, barbersho
         console.log(`Buscando horário para o dia: ${selectedDayKey} (${weekDays[dayIndex].label})`)
         
         const { data: schedule, error: scheduleError } = await supabase
-          .from("salon_schedule")
+          .from("barber_schedule")
           .select("open, close, active")
+          .eq("barber_id", barberId)
           .eq("barbershop_id", barbershopId)
           .eq("day", selectedDayKey)
           .single()

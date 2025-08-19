@@ -39,6 +39,12 @@ export default function MeuEstabelecimento() {
   const [minHoursBeforeCancel, setMinHoursBeforeCancel] = useState<number>(24)
   const [minHoursBeforeReschedule, setMinHoursBeforeReschedule] = useState<number>(24)
   const [savingPolicy, setSavingPolicy] = useState(false)
+  // Estados para horários dos barbeiros
+  const [scheduleView, setScheduleView] = useState<"salon" | "barber">("salon")
+  const [selectedBarberId, setSelectedBarberId] = useState<string | null>(null)
+  const [barberSchedules, setBarberSchedules] = useState<any>({})
+  const [loadingBarberSchedule, setLoadingBarberSchedule] = useState(false)
+  const [savingBarberSchedule, setSavingBarberSchedule] = useState(false)
 
   // Formulário de novo serviço
   const [newService, setNewService] = useState({
@@ -190,6 +196,13 @@ export default function MeuEstabelecimento() {
   }
   if (barbershopId) fetchPolicy()
 }, [barbershopId])
+
+// Buscar horários dos barbeiros quando selecionar um barbeiro
+useEffect(() => {
+  if (selectedBarberId && scheduleView === "barber") {
+    fetchBarberSchedule(selectedBarberId)
+  }
+}, [selectedBarberId, scheduleView, barbershopId])
 
   // Fetch barbers and services
   useEffect(() => {
@@ -413,6 +426,109 @@ export default function MeuEstabelecimento() {
     toast({ title: "Horários salvos!" })
     setSavingSchedule(false)
   }
+
+  // Buscar horários de um barbeiro específico
+const fetchBarberSchedule = async (barberId: string) => {
+  if (!barbershopId) return
+  setLoadingBarberSchedule(true)
+  const { data } = await supabase
+    .from("barber_schedule")
+    .select("id, day, open, close, active")
+    .eq("barber_id", barberId)
+    .eq("barbershop_id", barbershopId)
+  
+  const sched: any = {}
+  data?.forEach((row: any) => {
+    sched[row.day] = {
+      id: row.id,
+      is_open: row.active,
+      open: row.open || "",
+      close: row.close || "",
+    }
+  })
+  
+  setBarberSchedules((prev: any) => ({
+    ...prev,
+    [barberId]: sched
+  }))
+  setLoadingBarberSchedule(false)
+}
+
+// Handler para alterar horário do barbeiro
+const handleBarberScheduleChange = (barberId: string, day: string, field: "is_open" | "open" | "close", value: any) => {
+  setBarberSchedules((prev: any) => ({
+    ...prev,
+    [barberId]: {
+      ...prev[barberId],
+      [day]: {
+        ...prev[barberId]?.[day],
+        [field]: value,
+      },
+    },
+  }))
+}
+
+// Validar se horário do barbeiro está dentro do horário do salão
+const isValidBarberTime = (day: string, time: string, type: "open" | "close"): boolean => {
+  const salonSchedule = schedule[day]
+  if (!salonSchedule?.is_open || !salonSchedule.open || !salonSchedule.close) return false
+  
+  if (type === "open") {
+    return time >= salonSchedule.open
+  } else {
+    return time <= salonSchedule.close
+  }
+}
+
+// Salvar horários do barbeiro
+const handleSaveBarberSchedule = async (barberId: string) => {
+  if (!barbershopId) return
+  setSavingBarberSchedule(true)
+  
+  const barberSched = barberSchedules[barberId] || {}
+  
+  for (const day of weekDays) {
+    const s = barberSched[day.key] || {}
+    
+    // Validar horários se estão dentro do horário do salão
+    if (s.is_open && s.open && s.close) {
+      if (!isValidBarberTime(day.key, s.open, "open") || !isValidBarberTime(day.key, s.close, "close")) {
+        toast({ 
+          title: "Horário inválido", 
+          description: `Horário de ${day.label} deve estar dentro do funcionamento do salão`,
+          variant: "destructive" 
+        })
+        setSavingBarberSchedule(false)
+        return
+      }
+    }
+    
+    if (s.id) {
+      // update
+      await supabase
+        .from("barber_schedule")
+        .update({
+          active: !!s.is_open,
+          open: s.open || null,
+          close: s.close || null,
+        })
+        .eq("id", s.id)
+    } else if (s.is_open) {
+      // insert apenas se estiver ativo
+      await supabase.from("barber_schedule").insert({
+        barber_id: barberId,
+        barbershop_id: barbershopId,
+        day: day.key,
+        active: !!s.is_open,
+        open: s.open || null,
+        close: s.close || null,
+      })
+    }
+  }
+  
+  toast({ title: "Horários do barbeiro salvos!" })
+  setSavingBarberSchedule(false)
+}
 
   try {
     if (fatalError) {
@@ -661,80 +777,238 @@ export default function MeuEstabelecimento() {
             </div>
 
             <div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-xl overflow-hidden">
-              <div className="bg-gradient-to-r from-amber-600 to-amber-700 p-6">
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center"></div>
-                  Horários de Funcionamento
-                </h2>
+            <div className="bg-gradient-to-r from-amber-600 to-amber-700 p-6">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center"></div>
+                Horários de Funcionamento
+              </h2>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  onClick={() => {
+                    setScheduleView("salon")
+                    setSelectedBarberId(null)
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    scheduleView === "salon"
+                      ? "bg-white text-amber-700 shadow-md"
+                      : "bg-amber-500/20 text-white hover:bg-amber-500/30"
+                  }`}
+                >
+                  Horário do Salão
+                </button>
+                <button
+                  onClick={() => setScheduleView("barber")}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    scheduleView === "barber"
+                      ? "bg-white text-amber-700 shadow-md"
+                      : "bg-amber-500/20 text-white hover:bg-amber-500/30"
+                  }`}
+                >
+                  Horário dos Barbeiros
+                </button>
               </div>
+              {scheduleView === "barber" && (
+                <div className="mt-3">
+                  <select
+                    value={selectedBarberId || ""}
+                    onChange={(e) => setSelectedBarberId(e.target.value || null)}
+                    className="bg-white/90 text-amber-800 rounded-lg px-3 py-2 font-medium border-0 focus:ring-2 focus:ring-white/50"
+                  >
+                    <option value="">Selecione um barbeiro</option>
+                    {barbers.filter(b => b.is_active).map((barber) => (
+                      <option key={barber.id} value={barber.id}>
+                        {barber.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
               <div className="p-6">
-                {loadingSchedule ? (
-                  <div className="text-center py-8 text-slate-600">
-                    <div className="animate-spin w-8 h-8 border-4 border-amber-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                    Carregando horários...
-                  </div>
-                ) : (
-                  <form className="space-y-4">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-slate-200">
-                            <th className="text-left py-3 px-4 font-semibold text-slate-700">Dia da Semana</th>
-                            <th className="text-center py-3 px-4 font-semibold text-slate-700">Atende</th>
-                            <th className="text-center py-3 px-4 font-semibold text-slate-700">Abertura</th>
-                            <th className="text-center py-3 px-4 font-semibold text-slate-700">Fechamento</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {weekDays.map((day) => (
-                            <tr key={day.key} className="border-b border-slate-100 hover:bg-slate-50/50">
-                              <td className="py-4 px-4 font-medium text-slate-800">{day.label}</td>
-                              <td className="py-4 px-4 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={!!schedule[day.key]?.is_open}
-                                  onChange={(e) => handleScheduleChange(day.key, "is_open", e.target.checked)}
-                                  className="w-5 h-5 text-amber-600 border-slate-300 rounded focus:ring-amber-500"
-                                />
-                              </td>
-                              <td className="py-4 px-4">
-                                <Input
-                                  type="time"
-                                  value={schedule[day.key]?.open || ""}
-                                  onChange={(e) => handleScheduleChange(day.key, "open", e.target.value)}
-                                  disabled={!schedule[day.key]?.is_open}
-                                  className="border-slate-200 focus:border-amber-500 focus:ring-amber-500 disabled:bg-slate-50"
-                                />
-                              </td>
-                              <td className="py-4 px-4">
-                                <Input
-                                  type="time"
-                                  value={schedule[day.key]?.close || ""}
-                                  onChange={(e) => handleScheduleChange(day.key, "close", e.target.value)}
-                                  disabled={!schedule[day.key]?.is_open}
-                                  className="border-slate-200 focus:border-amber-500 focus:ring-amber-500 disabled:bg-slate-50"
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="pt-4">
-                      <Button
-                        onClick={(e) => {
-                          e.preventDefault()
-                          handleSaveSchedule()
-                        }}
-                        disabled={savingSchedule}
-                        className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
-                      >
-                        {savingSchedule ? "Salvando..." : "Salvar Horários"}
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </div>
+  {scheduleView === "salon" ? (
+    // Horários do Salão
+    <>
+      {loadingSchedule ? (
+        <div className="text-center py-8 text-slate-600">
+          <div className="animate-spin w-8 h-8 border-4 border-amber-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          Carregando horários...
+        </div>
+      ) : (
+        <form className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+            <p className="text-amber-800 font-medium mb-2">💡 Horário do Estabelecimento</p>
+            <p className="text-amber-700 text-sm">
+              Estes são os horários gerais do seu salão. Os barbeiros poderão definir horários próprios, 
+              mas apenas dentro deste período de funcionamento.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Dia da Semana</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Atende</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Abertura</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Fechamento</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weekDays.map((day) => (
+                  <tr key={day.key} className="border-b border-slate-100 hover:bg-slate-50/50">
+                    <td className="py-4 px-4 font-medium text-slate-800">{day.label}</td>
+                    <td className="py-4 px-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={!!schedule[day.key]?.is_open}
+                        onChange={(e) => handleScheduleChange(day.key, "is_open", e.target.checked)}
+                        className="w-5 h-5 text-amber-600 border-slate-300 rounded focus:ring-amber-500"
+                      />
+                    </td>
+                    <td className="py-4 px-4">
+                      <Input
+                        type="time"
+                        value={schedule[day.key]?.open || ""}
+                        onChange={(e) => handleScheduleChange(day.key, "open", e.target.value)}
+                        disabled={!schedule[day.key]?.is_open}
+                        className="border-slate-200 focus:border-amber-500 focus:ring-amber-500 disabled:bg-slate-50"
+                      />
+                    </td>
+                    <td className="py-4 px-4">
+                      <Input
+                        type="time"
+                        value={schedule[day.key]?.close || ""}
+                        onChange={(e) => handleScheduleChange(day.key, "close", e.target.value)}
+                        disabled={!schedule[day.key]?.is_open}
+                        className="border-slate-200 focus:border-amber-500 focus:ring-amber-500 disabled:bg-slate-50"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="pt-4">
+            <Button
+              onClick={(e) => {
+                e.preventDefault()
+                handleSaveSchedule()
+              }}
+              disabled={savingSchedule}
+              className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              {savingSchedule ? "Salvando..." : "Salvar Horários do Salão"}
+            </Button>
+          </div>
+        </form>
+      )}
+    </>
+  ) : (
+    // Horários dos Barbeiros
+    <>
+      {!selectedBarberId ? (
+        <div className="text-center py-12 text-slate-500">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            ⏰
+          </div>
+          Selecione um barbeiro acima para configurar seus horários.
+        </div>
+      ) : loadingBarberSchedule ? (
+        <div className="text-center py-8 text-slate-600">
+          <div className="animate-spin w-8 h-8 border-4 border-amber-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+          Carregando horários do barbeiro...
+        </div>
+      ) : (
+        <form className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <p className="text-blue-800 font-medium mb-2">
+              👤 Horário de {barbers.find(b => b.id === selectedBarberId)?.name}
+            </p>
+            <p className="text-blue-700 text-sm">
+              Configure os horários específicos deste barbeiro. Ele só poderá atender dentro do horário 
+              de funcionamento do salão.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-3 px-4 font-semibold text-slate-700">Dia da Semana</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Horário do Salão</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Barbeiro Atende</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Início</th>
+                  <th className="text-center py-3 px-4 font-semibold text-slate-700">Fim</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weekDays.map((day) => {
+                  const salonDay = schedule[day.key]
+                  const barberDay = barberSchedules[selectedBarberId]?.[day.key]
+                  return (
+                    <tr key={day.key} className="border-b border-slate-100 hover:bg-slate-50/50">
+                      <td className="py-4 px-4 font-medium text-slate-800">{day.label}</td>
+                      <td className="py-4 px-4 text-center text-sm">
+                        {salonDay?.is_open ? (
+                          <span className="text-green-700 font-medium">
+                            {salonDay.open?.slice(0,5)} - {salonDay.close?.slice(0,5)}
+                          </span>
+                        ) : (
+                          <span className="text-red-500">Fechado</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={!!barberDay?.is_open}
+                          disabled={!salonDay?.is_open}
+                          onChange={(e) => handleBarberScheduleChange(selectedBarberId, day.key, "is_open", e.target.checked)}
+                          className="w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-blue-500 disabled:bg-slate-100"
+                        />
+                      </td>
+                      <td className="py-4 px-4">
+                        <Input
+                          type="time"
+                          value={barberDay?.open || ""}
+                          min={salonDay?.open || undefined}
+                          max={salonDay?.close || undefined}
+                          onChange={(e) => handleBarberScheduleChange(selectedBarberId, day.key, "open", e.target.value)}
+                          disabled={!barberDay?.is_open || !salonDay?.is_open}
+                          className="border-slate-200 focus:border-blue-500 focus:ring-blue-500 disabled:bg-slate-50"
+                        />
+                      </td>
+                      <td className="py-4 px-4">
+                        <Input
+                          type="time"
+                          value={barberDay?.close || ""}
+                          min={salonDay?.open || undefined}
+                          max={salonDay?.close || undefined}
+                          onChange={(e) => handleBarberScheduleChange(selectedBarberId, day.key, "close", e.target.value)}
+                          disabled={!barberDay?.is_open || !salonDay?.is_open}
+                          className="border-slate-200 focus:border-blue-500 focus:ring-blue-500 disabled:bg-slate-50"
+                        />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="pt-4">
+            <Button
+              onClick={(e) => {
+                e.preventDefault()
+                handleSaveBarberSchedule(selectedBarberId)
+              }}
+              disabled={savingBarberSchedule}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+            >
+              {savingBarberSchedule ? "Salvando..." : "Salvar Horários do Barbeiro"}
+            </Button>
+          </div>
+        </form>
+      )}
+    </>
+  )}
+</div>
             </div>
 
             <div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-xl overflow-hidden">
