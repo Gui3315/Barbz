@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
-import { Camera, Save, User } from "lucide-react"
+import { Camera, Save, User, Lock } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabaseClient"
 
@@ -25,7 +25,6 @@ export default function Configuracoes() {
       city,
       state,
       cep,
-      cnpj,
       logo_url: logoUrl,
       updated_at: new Date().toISOString(),
     }
@@ -262,17 +261,18 @@ export default function Configuracoes() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="cnpj" className="text-sm font-medium text-slate-700">
-                          CNPJ
-                        </Label>
-                        <Input
-                          id="cnpj"
-                          value={cnpj}
-                          onChange={(e) => setCnpj(e.target.value)}
-                          disabled={loading}
-                          className="border-slate-200 focus:border-blue-500 focus:ring-blue-500/20"
-                        />
-                      </div>
+                      <Label htmlFor="cnpj" className="text-sm font-medium text-slate-700 flex items-center gap-1">
+                        CNPJ
+                        <Lock size={12} className="text-slate-500" />
+                      </Label>
+                      <Input
+                        id="cnpj"
+                        value={cnpj}
+                        readOnly
+                        disabled
+                        className="border-slate-200 bg-slate-50 cursor-not-allowed text-slate-600"
+                      />
+                    </div>
                     </div>
 
                     <div className="w-full lg:w-80">

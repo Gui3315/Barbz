@@ -471,73 +471,88 @@ export default function MeuEstabelecimento() {
                         className="bg-gradient-to-r from-slate-50 to-blue-50/30 rounded-xl border border-slate-200 p-4"
                       >
                         {editId === barber.id ? (
-                          <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center">
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Nome do barbeiro</label>
                             <Input
                               value={editBarber?.name || ""}
                               onChange={(e) =>
                                 setEditBarber((editBarber) => ({ ...editBarber!, name: e.target.value }))
                               }
-                              placeholder="Nome"
+                              placeholder="Digite o nome"
                               className="border-slate-200 focus:border-blue-500"
                             />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Telefone</label>
                             <Input
                               value={editBarber?.phone || ""}
                               onChange={(e) =>
-                                setEditBarber((editBarber) => ({ ...editBarber!, phone: e.target.value }))
+                                setEditBarber((editBarber) => ({ ...editBarber!, phone: maskPhone(e.target.value) }))
                               }
-                              placeholder="Telefone"
+                              placeholder="(00) 00000-0000"
+                              maxLength={15}
                               className="border-slate-200 focus:border-blue-500"
                             />
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 max-w-sm">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2 h-8 flex items-center">Início do almoço</label>
                             <Input
                               type="time"
                               value={editBarber?.lunch_start || ""}
                               onChange={(e) =>
                                 setEditBarber((editBarber) => ({ ...editBarber!, lunch_start: e.target.value }))
                               }
-                              placeholder="Início do almoço"
                               className="border-slate-200 focus:border-blue-500"
                             />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2 h-8 flex items-center">Fim do almoço</label>
                             <Input
                               type="time"
                               value={editBarber?.lunch_end || ""}
                               onChange={(e) =>
                                 setEditBarber((editBarber) => ({ ...editBarber!, lunch_end: e.target.value }))
                               }
-                              placeholder="Fim do almoço"
                               className="border-slate-200 focus:border-blue-500"
                             />
-                            <label className="flex items-center gap-2 text-sm">
+                          </div>
+                        </div>
+                          <div>
+                            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 p-3 rounded-lg bg-slate-50 border border-slate-200">
                               <input
                                 type="checkbox"
                                 checked={!!editBarber?.is_active}
                                 onChange={(e) =>
                                   setEditBarber((editBarber) => ({ ...editBarber!, is_active: e.target.checked }))
                                 }
-                                className="w-4 h-4 text-blue-600 border-slate-300 rounded"
+                                className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                               />
-                              Ativo
+                              Barbeiro ativo
                             </label>
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => handleSaveEdit(barber.id)}
-                                className="bg-green-600 hover:bg-green-700 text-white"
-                              >
-                                Salvar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setEditId(null)
-                                  setEditBarber(null)
-                                }}
-                                className="border-slate-300 text-slate-600 hover:bg-slate-50"
-                              >
-                                Cancelar
-                              </Button>
-                            </div>
                           </div>
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleSaveEdit(barber.id)}
+                              className="bg-green-600 hover:bg-green-700 text-white flex-1"
+                            >
+                              Salvar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditId(null)
+                                setEditBarber(null)
+                              }}
+                              className="border-slate-300 text-slate-600 hover:bg-slate-50 flex-1"
+                            >
+                              Cancelar
+                            </Button>
+                          </div>
+                        </div>
                         ) : (
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div className="flex flex-row items-center gap-4 w-full">

@@ -32,6 +32,7 @@ interface Appointment {
   client: { name: string }
   service: { name: string }
   barber: { name: string }
+  duration_minutes_snapshot?: number
 }
 
 interface Client {
@@ -189,7 +190,10 @@ export default function Agendamentos() {
           p_start_date: startDate,
           p_end_date: endDate,
         })
+        console.log('RPC Response:', data) // ← Adicione esta linha
+console.log('RPC Error:', error)   // ← Adicione esta linha
         if (error) {
+          
           console.error("Erro ao buscar agendamentos:", error)
           setAppointments([])
           setLoading(false)
@@ -198,20 +202,25 @@ export default function Agendamentos() {
         appointmentsData = data || []
         
       }
+      console.log('appointmentsData:', appointmentsData);
+console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
       // Mapear para o formato esperado pelo componente - usar dados direto da RPC
       setAppointments(
-        (appointmentsData || []).map((a: any) => ({
-          id: a.id,
-          start_at: a.start_at,
-          end_at: a.end_at,
-          status: a.status,
-          total_price: a.total_price,
-          notes: a.notes,
-          client: { name: a.client_name },
-          service: { name: a.service_name },
-          barber: { name: a.barber_name },
-        }))
-      )
+      (appointmentsData || []).map((a: any) => ({
+
+        id: a.id,
+        start_at: a.start_at,
+        end_at: a.end_at,
+        status: a.status,
+        total_price: a.total_price,
+        notes: a.notes,
+        client: { name: a.client_name },
+        service: { name: a.service_name },
+        barber: { name: a.barber_name },
+        duration_minutes_snapshot: a.duration_minutes_snapshot,
+      }))
+    )
+    
       setLoading(false)
     }
     fetchData()
@@ -487,12 +496,12 @@ export default function Agendamentos() {
 
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-slate-700">Data</label>
-                      <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm p-3">
+                      <div className="bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm p-3 flex justify-center">
                         <Calendar
                           mode="single"
                           selected={newAppointmentDate}
                           onSelect={setNewAppointmentDate}
-                          className="rounded-md pointer-events-auto"
+                          className="rounded-md pointer-events-auto mx-auto"
                           locale={ptBR}
                           disabled={{ before: new Date() }}
                         />
@@ -523,20 +532,20 @@ export default function Agendamentos() {
 
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-slate-700">Serviço</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {services.map((service) => (
-                          <Button
-                            key={service.id}
-                            type="button"
-                            variant={selectedService === service.id ? "default" : "outline"}
-                            onClick={() => setSelectedService(service.id)}
-                            className={`h-auto flex flex-col items-start p-4 rounded-xl transition-all ${
-                              selectedService === service.id
-                                ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg"
-                                : "bg-white/80 backdrop-blur-sm border-slate-200 hover:bg-amber-50 hover:border-amber-300"
-                            }`}
-                          >
-                            <span className="font-medium">{service.name}</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {services.map((service) => (
+                        <Button
+                          key={service.id}
+                          type="button"
+                          variant={selectedService === service.id ? "default" : "outline"}
+                          onClick={() => setSelectedService(service.id)}
+                          className={`h-auto flex flex-col items-start p-4 rounded-xl transition-all text-left ${
+                            selectedService === service.id
+                              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg"
+                              : "bg-white/80 backdrop-blur-sm border-slate-200 hover:bg-amber-50 hover:border-amber-300"
+                          }`}
+                        >
+                          <span className="font-medium text-sm leading-tight">{service.name}</span>
                             <div className="flex justify-between w-full mt-2">
                               <span className="text-xs opacity-80">{service.duration_minutes} min</span>
                               <span className="text-xs opacity-80">R$ {Number(service.price).toFixed(2)}</span>
@@ -548,7 +557,7 @@ export default function Agendamentos() {
 
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-slate-700">Horário</label>
-                      <div className="grid grid-cols-4 gap-2 min-h-10">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 min-h-10">
                         {loadingTimes ? (
                           <span className="col-span-4 text-slate-500 text-center py-4">Carregando horários...</span>
                         ) : availableTimes.length === 0 ? (
@@ -630,23 +639,26 @@ export default function Agendamentos() {
                         <div className="ml-4">
                           <div className="font-semibold text-slate-800">{appointment.client?.name || "Cliente não informado"}</div>
                           <div className="text-sm text-slate-600">
-                            {appointment.service?.name || "Serviço selecionado"}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center">
-                        <div className="text-right mr-4">
-                          <div className="flex items-center text-slate-700">
-                            <Clock size={14} className="mr-2 text-blue-600" />
-                            <span className="font-medium">
-                              {appointment.start_at
-                                ? appointment.start_at.substring(11, 16)
-                                : "--:--"}
+                          <div>{appointment.service?.name || "Serviço selecionado"}</div>
+                          {appointment.duration_minutes_snapshot && (
+                            <span className="text-xs text-slate-500">
+                              ({appointment.duration_minutes_snapshot}min)
                             </span>
-                          </div>
-                          <div className="text-sm text-slate-500 mt-1">{appointment.barber?.name || "Barbeiro"}</div>
+                          )}
+                        </div>
                         </div>
                       </div>
+                      <div className="flex flex-col items-end">
+                      <div className="flex items-center text-slate-700">
+                        <Clock size={14} className="mr-2 text-blue-600" />
+                        <span className="font-medium">
+                          {appointment.start_at
+                            ? appointment.start_at.substring(11, 16)
+                            : "--:--"}
+                        </span>
+                      </div>
+                      <div className="text-sm text-slate-500 mt-1">{appointment.barber?.name || "Barbeiro"}</div>
+                    </div>
                     </div>
                   ))
                 )}
