@@ -21,16 +21,13 @@ const queryClient = new QueryClient();
 
 const App = () => {
   useEffect(() => {
-    const updateSW = registerSW({
-      onNeedRefresh() {
-        if (confirm('Nova versão do Barbz disponível! Recarregar agora?')) {
-          updateSW(true);
-        }
-      },
-      onOfflineReady() {
-      },
-    });
-  }, []);
+  const updateSW = registerSW({
+    onNeedRefresh() {
+      updateSW(true); // Atualiza imediatamente sem perguntar
+    },
+    onOfflineReady() {},
+  });
+}, []);
 
   return (
     <QueryClientProvider client={queryClient}>

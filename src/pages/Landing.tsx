@@ -27,19 +27,12 @@ export default function Landing() {
           <div className="flex gap-1 sm:gap-2 flex-shrink-0 ml-auto mr-2 md:ml-0 md:mr-4 lg:mr-8 w-auto"
             style={{marginLeft: 'auto'}}
           >
-            <Button 
-              variant="ghost" 
-              className="text-slate-600 hover:text-slate-900 px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-base min-w-0"
-              asChild
-            >
-              <Link to="/login">Área do Cliente</Link>
-            </Button>
-            <Button
-              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/25 px-2 sm:px-4 py-1 sm:py-2 text-xs sm:text-base min-w-0"
-              asChild
-            >
-              <Link to="/login">Área do Proprietário</Link>
-            </Button>
+           <Button
+            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg shadow-blue-500/25 px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg font-semibold rounded-lg h-12"
+            asChild
+          >
+            <Link to="/login">Faça login</Link>
+          </Button>
           </div>
         </div>
       </header>
