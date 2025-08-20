@@ -46,6 +46,32 @@ export default function MeuEstabelecimento() {
   const [loadingBarberSchedule, setLoadingBarberSchedule] = useState(false)
   const [savingBarberSchedule, setSavingBarberSchedule] = useState(false)
 
+type Barbershop = {
+  id?: string;
+  min_hours_before_cancel?: number;
+  min_hours_before_reschedule?: number;
+  name?: string;
+  owner_id?: string;
+  whatsapp_message_title?: string;
+  whatsapp_number?: string;
+  whatsapp_message_text?: string;
+};
+
+  const [barbershop, setBarbershop] = useState<Barbershop | null>(null);
+  useEffect(() => {
+    if (!barbershopId) return;
+    async function fetchBarbershop() {
+      const { data } = await supabase
+        .from("barbershops")
+        .select("*")
+        .eq("id", barbershopId)
+        .single();
+      if (data) setBarbershop(data as Barbershop);
+    }
+    fetchBarbershop();
+  }, [barbershopId]);
+  
+
   // Formulário de novo serviço
   const [newService, setNewService] = useState({
     name: "",
@@ -60,6 +86,14 @@ export default function MeuEstabelecimento() {
   const [editServiceId, setEditServiceId] = useState<string | null>(null)
   const [editService, setEditService] = useState<any>(null)
   const [savingService, setSavingService] = useState(false)
+
+ 
+  const whatsappNumber = barbershop?.whatsapp_number?.replace(/\D/g, ""); // só números
+  const whatsappText = encodeURIComponent(barbershop?.whatsapp_message_text || "");
+  const whatsappLink = whatsappNumber
+    ? `https://wa.me/${whatsappNumber}?text=${whatsappText}`
+    : "#";
+
 
   // Handler para adicionar serviço
   const handleAddService = async () => {
@@ -1009,230 +1043,319 @@ const handleSaveBarberSchedule = async (barberId: string) => {
     </>
   )}
 </div>
-            </div>
+</div>
 
-            <div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-xl overflow-hidden">
-              <div className="bg-gradient-to-r from-slate-700 to-slate-800 p-6">
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center"></div>
-                  Serviços Oferecidos
-                </h2>
-              </div>
-              <div className="p-6">
-                <div className="mb-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Nome do serviço</label>
-                    <Input
-                      placeholder="Ex: Corte masculino"
-                      value={newService.name}
-                      onChange={(e) => setNewService((s) => ({ ...s, name: e.target.value }))}
-                      className="border-slate-200 focus:border-slate-500 focus:ring-slate-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Descrição</label>
-                    <Input
-                      placeholder="Tipo/Descrição"
-                      value={newService.description}
-                      onChange={(e) => setNewService((s) => ({ ...s, description: e.target.value }))}
-                      className="border-slate-200 focus:border-slate-500 focus:ring-slate-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Valor (R$)</label>
-                    <Input
-                      placeholder="0,00"
-                      type="number"
-                      min="0"
-                      value={newService.price}
-                      onChange={(e) => setNewService((s) => ({ ...s, price: e.target.value }))}
-                      className="border-slate-200 focus:border-slate-500 focus:ring-slate-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Duração (min)</label>
-                    <Input
-                      placeholder="30"
-                      type="number"
-                      min="1"
-                      value={newService.duration_minutes}
-                      onChange={(e) => setNewService((s) => ({ ...s, duration_minutes: e.target.value }))}
-                      className="border-slate-200 focus:border-slate-500 focus:ring-slate-500"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="barberOnly"
-                      checked={newService.barber_only}
-                      onChange={e => setNewService(s => ({ ...s, barber_only: e.target.checked }))}
-                      className="w-4 h-4"
-                    />
-                    <label htmlFor="barberOnly" className="text-sm text-slate-700">Somente eu posso ver</label>
-                  </div>
-                  <Button
-                    onClick={handleAddService}
-                    disabled={addingService}
-                    className="bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
-                  >
-                    {addingService ? "Adicionando..." : "Adicionar Serviço"}
-                  </Button>
-                </div>
+<div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-xl overflow-hidden">
+  <div className="bg-gradient-to-r from-slate-700 to-slate-800 p-6">
+    <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center"></div>
+      Serviços Oferecidos
+    </h2>
+  </div>
+  <div className="p-6">
+    <div className="mb-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Nome do serviço</label>
+        <Input
+          placeholder="Ex: Corte masculino"
+          value={newService.name}
+          onChange={(e) => setNewService((s) => ({ ...s, name: e.target.value }))}
+          className="border-slate-200 focus:border-slate-500 focus:ring-slate-500"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Descrição</label>
+        <Input
+          placeholder="Tipo/Descrição"
+          value={newService.description}
+          onChange={(e) => setNewService((s) => ({ ...s, description: e.target.value }))}
+          className="border-slate-200 focus:border-slate-500 focus:ring-slate-500"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Valor (R$)</label>
+        <Input
+          placeholder="0,00"
+          type="number"
+          min="0"
+          value={newService.price}
+          onChange={(e) => setNewService((s) => ({ ...s, price: e.target.value }))}
+          className="border-slate-200 focus:border-slate-500 focus:ring-slate-500"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Duração (min)</label>
+        <Input
+          placeholder="30"
+          type="number"
+          min="1"
+          value={newService.duration_minutes}
+          onChange={(e) => setNewService((s) => ({ ...s, duration_minutes: e.target.value }))}
+          className="border-slate-200 focus:border-slate-500 focus:ring-slate-500"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="barberOnly"
+          checked={newService.barber_only}
+          onChange={e => setNewService(s => ({ ...s, barber_only: e.target.checked }))}
+          className="w-4 h-4"
+        />
+        <label htmlFor="barberOnly" className="text-sm text-slate-700">Somente eu posso ver</label>
+      </div>
+      <Button
+        onClick={handleAddService}
+        disabled={addingService}
+        className="bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+      >
+        {addingService ? "Adicionando..." : "Adicionar Serviço"}
+      </Button>
+    </div>
 
-                {loadingServices ? (
-                  <div className="text-center py-8 text-slate-600">
-                    <div className="animate-spin w-8 h-8 border-4 border-slate-600 border-t-transparent rounded-full mx-auto mb-4"></div>
-                    Carregando serviços...
-                  </div>
-                ) : services.length === 0 ? (
-                  <div className="text-center py-12 text-slate-500">
-                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      💼
+    {loadingServices ? (
+      <div className="text-center py-8 text-slate-600">
+        <div className="animate-spin w-8 h-8 border-4 border-slate-600 border-t-transparent rounded-full mx-auto mb-4"></div>
+        Carregando serviços...
+      </div>
+    ) : (
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-slate-200">
+              <th className="text-left py-3 px-4 font-semibold text-slate-700">Nome</th>
+              <th className="text-left py-3 px-4 font-semibold text-slate-700">Descrição</th>
+              <th className="text-center py-3 px-4 font-semibold text-slate-700">Valor</th>
+              <th className="text-center py-3 px-4 font-semibold text-slate-700">Duração</th>
+              <th className="text-center py-3 px-4 font-semibold text-slate-700">Exclusivo?</th>
+              <th className="text-center py-3 px-4 font-semibold text-slate-700">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* Linha especial do WhatsApp */}
+            <tr className="border-b border-slate-100 hover:bg-slate-50/50">
+              {editServiceId === "whatsapp" ? (
+                <>
+                  <td className="py-4 px-4">
+                    <Input
+                      value={barbershop?.whatsapp_message_title || ""}
+                      onChange={e => setBarbershop((s: any) => ({ ...s, whatsapp_message_title: e.target.value }))}
+                      placeholder="Ex: Outros serviços"
+                      className="border-slate-200 focus:border-slate-500"
+                    />
+                  </td>
+                  <td className="py-4 px-4">
+                    <Input
+                      value={barbershop?.whatsapp_message_text || ""}
+                      onChange={e => setBarbershop((s: any) => ({ ...s, whatsapp_message_text: e.target.value }))}
+                      placeholder="Entre em contato pelo WhatsApp para serviços personalizados e avaliação."
+                      className="border-slate-200 focus:border-slate-500"
+                    />
+                  </td>
+                  <td className="py-4 px-4 text-center text-slate-600">
+                    <Input
+                      value={barbershop?.whatsapp_number || ""}
+                      onChange={e => setBarbershop((s: any) => ({ ...s, whatsapp_number: e.target.value }))}
+                      placeholder="Ex: 5515999999999"
+                      className="border-slate-200 focus:border-slate-500"
+                    />
+                  </td>
+                  <td className="py-4 px-4 text-center text-slate-500">—</td>
+                  <td className="py-4 px-4 text-center text-slate-500">—</td>
+                  <td className="py-4 px-4">
+                    <div className="flex gap-2 justify-center">
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          await supabase
+                            .from("barbershops")
+                            .update({
+                              whatsapp_message_title: barbershop?.whatsapp_message_title,
+                              whatsapp_number: barbershop?.whatsapp_number,
+                              whatsapp_message_text: barbershop?.whatsapp_message_text,
+                            } as any)
+                            .eq("id", barbershopId);
+                          toast({ title: "WhatsApp atualizado!" });
+                          setEditServiceId(null);
+                        }}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        Salvar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditServiceId(null)}
+                        className="border-slate-300 text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancelar
+                      </Button>
                     </div>
-                    Nenhum serviço cadastrado ainda.
-                  </div>
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td className="py-4 px-4 font-medium text-slate-800">
+                    {barbershop?.whatsapp_message_title || "Outros serviços"}
+                  </td>
+                  <td className="py-4 px-4 text-slate-600">
+                    {barbershop?.whatsapp_message_text || "Entre em contato pelo WhatsApp para serviços personalizados e avaliação."}
+                  </td>
+                  <td className="py-4 px-4 text-center text-slate-600">
+                    {barbershop?.whatsapp_number ? "Número configurado" : "Número não configurado"}
+                  </td>
+                  <td className="py-4 px-4 text-center text-slate-500">—</td>
+                  <td className="py-4 px-4 text-center text-slate-500">—</td>
+                  <td className="py-4 px-4">
+                    <div className="flex gap-2 justify-center">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditServiceId("whatsapp")}
+                        className="border-slate-300 text-slate-600 hover:bg-slate-50"
+                      >
+                        Editar
+                      </Button>
+                    </div>
+                  </td>
+                </>
+              )}
+            </tr>
+            
+            {/* Serviços normais */}
+            {services.map((service) => (
+              <tr key={service.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                {editServiceId === service.id ? (
+                  <>
+                    <td className="py-4 px-4">
+                      <Input
+                        value={editService?.name || ""}
+                        onChange={(e) => setEditService((s: any) => ({ ...s, name: e.target.value }))}
+                        placeholder="Nome"
+                        className="border-slate-200 focus:border-slate-500"
+                      />
+                    </td>
+                    <td className="py-4 px-4">
+                      <Input
+                        value={editService?.description || ""}
+                        onChange={(e) =>
+                          setEditService((s: any) => ({ ...s, description: e.target.value }))
+                        }
+                        placeholder="Descrição"
+                        className="border-slate-200 focus:border-slate-500"
+                      />
+                    </td>
+                    <td className="py-4 px-4">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={editService?.price || ""}
+                        onChange={(e) => setEditService((s: any) => ({ ...s, price: e.target.value }))}
+                        placeholder="Valor"
+                        className="border-slate-200 focus:border-slate-500"
+                      />
+                    </td>
+                    <td className="py-4 px-4">
+                      <Input
+                        type="number"
+                        min="1"
+                        value={editService?.duration_minutes || ""}
+                        onChange={(e) =>
+                          setEditService((s: any) => ({ ...s, duration_minutes: e.target.value }))
+                        }
+                        placeholder="Duração"
+                        className="border-slate-200 focus:border-slate-500"
+                      />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          id={`barberOnlyEdit-${service.id}`}
+                          checked={editService?.barber_only || false}
+                          onChange={e => setEditService((s: any) => ({ ...s, barber_only: e.target.checked }))}
+                          className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                        />
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex gap-2 justify-center">
+                        <Button
+                          size="sm"
+                          onClick={() => handleSaveEditService(service.id)}
+                          disabled={savingService}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          Salvar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setEditServiceId(null)
+                            setEditService(null)
+                          }}
+                          className="border-slate-300 text-slate-600 hover:bg-slate-50"
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </td>
+                  </>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="text-left py-3 px-4 font-semibold text-slate-700">Nome</th>
-                          <th className="text-left py-3 px-4 font-semibold text-slate-700">Descrição</th>
-                          <th className="text-center py-3 px-4 font-semibold text-slate-700">Valor</th>
-                          <th className="text-center py-3 px-4 font-semibold text-slate-700">Duração</th>
-                          <th className="text-center py-3 px-4 font-semibold text-slate-700">Exclusivo?</th>
-                          <th className="text-center py-3 px-4 font-semibold text-slate-700">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {services.map((service) => (
-                          <tr key={service.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                            {editServiceId === service.id ? (
-                              <>
-                                <td className="py-4 px-4">
-                                  <Input
-                                    value={editService?.name || ""}
-                                    onChange={(e) => setEditService((s: any) => ({ ...s, name: e.target.value }))}
-                                    placeholder="Nome"
-                                    className="border-slate-200 focus:border-slate-500"
-                                  />
-                                </td>
-                                <td className="py-4 px-4">
-                                  <Input
-                                    value={editService?.description || ""}
-                                    onChange={(e) =>
-                                      setEditService((s: any) => ({ ...s, description: e.target.value }))
-                                    }
-                                    placeholder="Descrição"
-                                    className="border-slate-200 focus:border-slate-500"
-                                  />
-                                </td>
-                                <td className="py-4 px-4">
-                                  <Input
-                                    type="number"
-                                    min="0"
-                                    value={editService?.price || ""}
-                                    onChange={(e) => setEditService((s: any) => ({ ...s, price: e.target.value }))}
-                                    placeholder="Valor"
-                                    className="border-slate-200 focus:border-slate-500"
-                                  />
-                                </td>
-                                <td className="py-4 px-4">
-                                  <Input
-                                    type="number"
-                                    min="1"
-                                    value={editService?.duration_minutes || ""}
-                                    onChange={(e) =>
-                                      setEditService((s: any) => ({ ...s, duration_minutes: e.target.value }))
-                                    }
-                                    placeholder="Duração"
-                                    className="border-slate-200 focus:border-slate-500"
-                                  />
-                                </td>
-                                <td className="py-4 px-4">
-                              <div className="flex items-center gap-2 justify-center">
-                                <input
-                                  type="checkbox"
-                                  id={`barberOnlyEdit-${service.id}`}
-                                  checked={editService?.barber_only || false}
-                                  onChange={e => setEditService((s: any) => ({ ...s, barber_only: e.target.checked }))}
-                                  className="w-4 h-4"
-                                />
-                                <label htmlFor={`barberOnlyEdit-${service.id}`} className="text-xs text-slate-700">
-                                  Exclusivo do barbeiro
-                                </label>
-                              </div>
-                            </td>
-                                <td className="py-4 px-4">
-                                  <div className="flex gap-2 justify-center">
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleSaveEditService(service.id)}
-                                      disabled={savingService}
-                                      className="bg-green-600 hover:bg-green-700 text-white"
-                                    >
-                                      Salvar
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => {
-                                        setEditServiceId(null)
-                                        setEditService(null)
-                                      }}
-                                      className="border-slate-300 text-slate-600 hover:bg-slate-50"
-                                    >
-                                      Cancelar
-                                    </Button>
-                                  </div>
-                                </td>
-                              </>
-                            ) : (
-                              <>
-                                <td className="py-4 px-4 font-medium text-slate-800">{service.name}</td>
-                                <td className="py-4 px-4 text-slate-600">{service.description}</td>
-                                <td className="py-4 px-4 text-center font-semibold text-green-600">
-                                  R$ {Number(service.price).toFixed(2)}
-                                </td>
-                                <td className="py-4 px-4 text-center text-slate-600">{service.duration_minutes} min</td>
-                                <td className="py-4 px-4 text-center">
-                                  {service.barber_only ? (
-                                    <span title="Exclusivo do barbeiro" className="text-blue-600 font-bold">✔️</span>
-                                  ) : (
-                                    <span title="Visível para todos" className="text-slate-400">—</span>
-                                  )}
-                                </td>
-                                <td className="py-4 px-4 text-center text-slate-600">{service.duration_minutes} min</td>
-                                <td className="py-4 px-4">
-                                  <div className="flex gap-2 justify-center">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleEditService(service)}
-                                      className="border-slate-300 text-slate-600 hover:bg-slate-50"
-                                    >
-                                      Editar
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="destructive"
-                                      onClick={() => handleRemoveService(service.id)}
-                                      className="bg-red-500 hover:bg-red-600"
-                                    >
-                                      Remover
-                                    </Button>
-                                  </div>
-                                </td>
-                              </>
-                            )}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <>
+                    <td className="py-4 px-4 font-medium text-slate-800">{service.name}</td>
+                    <td className="py-4 px-4 text-slate-600">{service.description || "—"}</td>
+                    <td className="py-4 px-4 text-center font-semibold text-green-600">
+                      R$ {Number(service.price).toFixed(2)}
+                    </td>
+                    <td className="py-4 px-4 text-center text-slate-600">{service.duration_minutes} min</td>
+                    <td className="py-4 px-4 text-center">
+                      {service.barber_only ? (
+                        <span title="Exclusivo do barbeiro" className="text-blue-600 font-bold">✔️</span>
+                      ) : (
+                        <span title="Visível para todos" className="text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex gap-2 justify-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditService(service)}
+                          className="border-slate-300 text-slate-600 hover:bg-slate-50"
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRemoveService(service.id)}
+                          className="bg-red-500 hover:bg-red-600"
+                        >
+                          Remover
+                        </Button>
+                      </div>
+                    </td>
+                  </>
                 )}
-              </div>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        
+        {services.length === 0 && (
+          <div className="text-center py-8 text-slate-500 mt-4">
+            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              💼
             </div>
+            Adicione seus primeiros serviços acima.
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+</div>
             
             <div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-xl overflow-hidden">
               <div className="bg-gradient-to-r from-amber-700 to-blue-700 p-6">

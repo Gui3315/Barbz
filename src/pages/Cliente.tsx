@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom"
 import { useAuth } from "@/contexts/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { getOccupiedSlots } from "@/utils/availabilityUtils"
+import { Send } from "lucide-react";
 import { Link } from "react-router-dom"
 import { getAvailableTimeSlots, getAvailableBarbersForSlot } from "@/utils/availabilityUtils"
 import { ClientLayout } from "@/components/client/layout"
@@ -523,9 +524,9 @@ const filterServicesForTimeSlot = async (timeSlot: string) => {
   const fetchBarbershops = async () => {
     try {
       const { data, error } = await supabase
-        .from("barbershops")
-        .select("id, name")
-        .order("name")
+  .from("barbershops")
+  .select("id, name, whatsapp_number, whatsapp_message_title, whatsapp_message_text")
+  .order("name")
       
       if (error) throw error
       setBarbershops(data || [])
@@ -1303,6 +1304,32 @@ useEffect(() => {
                     {bookingStep === "service" && bookingMethod === "by-time" && (
                       <div className="space-y-4">
                         <h3 className="text-lg font-semibold text-slate-800 mb-4">Escolha o serviço</h3>
+                        {selectedBarbershop && (
+                          <div className="mt-6 flex flex-col items-center border border-blue-200 rounded-xl p-4 bg-blue-50">
+                            <span className="text-slate-700 font-medium mb-2">
+                              {selectedBarbershop.whatsapp_message_title || "Não encontrou o serviço que está procurando?"}
+                            </span>
+                            <span className="text-slate-600 mb-2">
+                              {selectedBarbershop.whatsapp_message_text || "Entre em contato pelo WhatsApp!"}
+                            </span>
+                            {selectedBarbershop.whatsapp_number ? (
+                            <a
+                              href={`https://wa.me/${selectedBarbershop.whatsapp_number.replace(/\D/g, "")}?text=${encodeURIComponent(selectedBarbershop.whatsapp_message_text || "Olá! Gostaria de saber mais sobre os serviços.")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg shadow transition"
+                            >
+                              <Send size={20} />
+                              {selectedBarbershop.whatsapp_message_title || "Falar no WhatsApp"}
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg shadow cursor-not-allowed">
+                              <Send size={20} />
+                              WhatsApp não configurado
+                            </div>
+                          )}
+                          </div>
+                        )}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {services.filter(service => !service.barber_only).map((service) => (
                             <button
@@ -1335,7 +1362,7 @@ useEffect(() => {
                         </button>
                       </div>
                     )}
-
+                      </div>
                     {/* Passo 3B: Selecionar Barbeiro (Por barbeiro) */}
                     {bookingStep === "barber" && bookingMethod === "by-barber" && (
                       <div className="space-y-4">
@@ -1592,7 +1619,32 @@ useEffect(() => {
                             {selectedBarber?.name} • {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')} às {selectedTime}
                           </span>
                         </h3>
-                        
+                        {selectedBarbershop && (
+                        <div className="mt-6 flex flex-col items-center border border-blue-200 rounded-xl p-4 bg-blue-50">
+                          <span className="text-slate-700 font-medium mb-2">
+                            {selectedBarbershop.whatsapp_message_title || "Não encontrou o serviço que está procurando?"}
+                          </span>
+                          <span className="text-slate-600 mb-2">
+                            {selectedBarbershop.whatsapp_message_text || "Entre em contato pelo WhatsApp!"}
+                          </span>
+                          {selectedBarbershop.whatsapp_number ? (
+                            <a
+                              href={`https://wa.me/${selectedBarbershop.whatsapp_number.replace(/\D/g, "")}?text=${encodeURIComponent(selectedBarbershop.whatsapp_message_text || "Olá! Gostaria de saber mais sobre os serviços.")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg shadow transition"
+                            >
+                              <Send size={20} />
+                              {selectedBarbershop.whatsapp_message_title || "Falar no WhatsApp"}
+                            </a>
+                          ) : (
+                            <div className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg shadow cursor-not-allowed">
+                              <Send size={20} />
+                              WhatsApp não configurado
+                            </div>
+                          )}
+                        </div>
+                      )}
                         {filteredServices.length === 0 ? (
                         <div className="text-center py-8 text-slate-600">
                           <Scissors size={32} className="mx-auto mb-2 text-slate-400" />
@@ -1666,7 +1718,7 @@ useEffect(() => {
                       </div>
                     )}
                   </div>
-                </div>
+                
               </TabsContent>
 
               <TabsContent value="perfil" className="p-6">
