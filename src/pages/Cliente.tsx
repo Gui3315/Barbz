@@ -375,7 +375,7 @@ const cancelReschedule = () => {
       .select(`
         *,
         barbers (name, phone),
-        barbershops (name, min_hours_before_cancel, min_hours_before_reschedule),
+        barbershops (name, min_hours_before_cancel, min_hours_before_reschedule, profiles:owner_id(logo_url)),
         appointment_services (
           service_id,
           name_snapshot,
@@ -524,9 +524,9 @@ const filterServicesForTimeSlot = async (timeSlot: string) => {
   const fetchBarbershops = async () => {
     try {
       const { data, error } = await supabase
-  .from("barbershops")
-  .select("id, name, whatsapp_number, whatsapp_message_title, whatsapp_message_text")
-  .order("name")
+        .from("barbershops")
+        .select("id, name, whatsapp_number, whatsapp_message_title, whatsapp_message_text, profiles:owner_id(logo_url)")
+        .order("name")
       
       if (error) throw error
       setBarbershops(data || [])
@@ -951,9 +951,20 @@ useEffect(() => {
                           <div className="flex justify-between items-start mb-4">
                             <div className="space-y-1">
                               <div className="flex items-center gap-2">
-                                <h3 className="text-lg font-semibold text-slate-800">
-                                  {appointment.barbershops?.name}
-                                </h3>
+                                <div className="flex items-center gap-2">
+                                {appointment.barbershops?.profiles?.logo_url ? (
+                                  <img
+                                    src={appointment.barbershops.profiles.logo_url}
+                                    alt={appointment.barbershops.name}
+                                    className="w-8 h-8 rounded-lg object-cover border border-slate-200 bg-white"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                                    <Scissors className="text-white" size={16} />
+                                  </div>
+                                )}
+                                <span>{appointment.barbershops?.name}</span>
+                              </div>
                                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                   isCancelled 
                                     ? "bg-red-100 text-red-700"
@@ -1237,9 +1248,17 @@ useEffect(() => {
                               className="p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 text-left"
                             >
                               <div className="flex items-center space-x-3">
+                                {shop.profiles?.logo_url ? (
+                                <img
+                                  src={shop.profiles.logo_url}
+                                  alt={shop.name}
+                                  className="w-12 h-12 rounded-lg object-cover border border-slate-200 bg-white"
+                                />
+                              ) : (
                                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
                                   <Scissors className="text-white" size={20} />
                                 </div>
+                              )}
                                 <div>
                                   <h4 className="font-semibold text-slate-800">{shop.name}</h4>
                                   <p className="text-sm text-slate-600">Clique para selecionar</p>
