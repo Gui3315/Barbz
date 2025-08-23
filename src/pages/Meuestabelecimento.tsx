@@ -698,7 +698,7 @@ const handleSaveBarberSchedule = async (barberId: string) => {
                           </div>
                           <div className="grid grid-cols-2 gap-4 max-w-sm">
                           <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2 h-8 flex items-center">Início do almoço</label>
+                            <label className="text-sm font-medium text-slate-700 mb-2 h-8 flex items-center">Início do almoço</label>
                             <Input
                               type="time"
                               value={editBarber?.lunch_start || ""}
@@ -709,7 +709,7 @@ const handleSaveBarberSchedule = async (barberId: string) => {
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-slate-700 mb-2 h-8 flex items-center">Fim do almoço</label>
+                            <label className="text-sm font-medium text-slate-700 mb-2 h-8 flex items-center">Fim do almoço</label>
                             <Input
                               type="time"
                               value={editBarber?.lunch_end || ""}

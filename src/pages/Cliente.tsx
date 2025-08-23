@@ -44,6 +44,7 @@ const createLocalDateTime = (date, time) => {
 };
 
 export default function Cliente() {
+
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState("meus-agendamentos")
@@ -543,6 +544,7 @@ const filterServicesForTimeSlot = async (timeSlot: string) => {
         .select("*")
         .eq("barbershop_id", barbershopId)
         .eq("is_active", true)
+        .eq("barber_only", false)
         .order("name")
       
       if (error) throw error
@@ -1034,6 +1036,12 @@ useEffect(() => {
                               <p className="font-semibold text-slate-800">
                                 {service?.name_snapshot || "Serviço não informado"}
                               </p>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="font-semibold text-slate-800">Aviso</p>
+                              <p className="text-slate-500">Cancelamento: até {appointment.barbershops?.min_hours_before_cancel ?? 2}h antes</p>
+                              <p className="text-slate-500">Reagendamento: até {appointment.barbershops?.min_hours_before_reschedule ?? 2}h antes</p>
                             </div>
                           </div>
                           
