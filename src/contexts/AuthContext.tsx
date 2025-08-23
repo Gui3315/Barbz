@@ -20,20 +20,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Carrega usuário do localStorage na inicialização
   useEffect(() => {
-    const savedUser = localStorage.getItem('auth_user');
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        setUser(parsedUser);
-      } catch (error) {
-        console.error('Erro ao carregar usuário do localStorage:', error);
-        localStorage.removeItem('auth_user');
-      }
+  async function checkUser() {
+    const { data, error } = await supabase.auth.getUser();
+    if (data?.user) {
+      // Adapte aqui se precisar do user_type, por exemplo buscando do banco
+      setUser({
+        id: data.user.id,
+        email: data.user.email ?? "",
+        user_type: (data.user.user_metadata?.user_type ?? "cliente") as "proprietario" | "cliente"
+      });
+      localStorage.setItem('auth_user', JSON.stringify({
+        id: data.user.id,
+        email: data.user.email ?? "",
+        user_type: (data.user.user_metadata?.user_type ?? "cliente") as "proprietario" | "cliente"
+      }));
+    } else {
+      setUser(null);
+      localStorage.removeItem('auth_user');
     }
-    setLoading(false); // <-- Adicione aqui
-  }, []);
+    setLoading(false);
+  }
+  checkUser();
+}, []);
 
   // Salva usuário no localStorage sempre que mudar
   useEffect(() => {
