@@ -37,10 +37,6 @@ function generateTimeSlots(openTime: string, closeTime: string, intervalMinutes 
   return slots
 }
 
-// No início do componente Cliente
-const [touchStartX, setTouchStartX] = useState<number | null>(null);
-const [touchEndX, setTouchEndX] = useState<number | null>(null);
-
 // Função utilitária para criar datas no fuso correto
 const createLocalDateTime = (date, time) => {
   // Criar data no formato ISO local sem conversão de fuso
@@ -49,6 +45,10 @@ const createLocalDateTime = (date, time) => {
 };
 
 export default function Cliente() {
+
+  // No início do componente Cliente
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
   const navigate = useNavigate();
   const { logout } = useAuth();
