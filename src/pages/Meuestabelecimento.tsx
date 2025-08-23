@@ -578,7 +578,7 @@ const handleSaveBarberSchedule = async (barberId: string) => {
           <div className="space-y-8 p-6">
             <div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-xl p-6">
               <h1 className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-slate-800 via-blue-600 to-amber-600 bg-clip-text text-transparent break-words text-balance leading-tight max-w-[320px] sm:max-w-none">
-                Meu Estabelecimento
+                Minha Barbearia
               </h1>
               <p className="text-slate-600 mt-2">Gerencie barbeiros, serviços e horários de funcionamento</p>
             </div>

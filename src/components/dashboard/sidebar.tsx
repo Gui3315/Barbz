@@ -18,7 +18,11 @@ import {
   Star,
   Package,
   FileText,
-  Clock
+  Clock,
+  Scissors,
+  ScissorsIcon,
+  ScissorsLineDashed,
+  ScissorsSquare
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -29,8 +33,8 @@ const navItems = [
     href: "/agendamentos",
   },
   {
-    title: "Meu Estabelecimento",
-    icon: <Package className="h-5 w-5" />,
+    title: "Minha Barbearia",
+    icon: <Scissors className="h-5 w-5" />,
     href: "/Meuestabelecimento",
   },
   {
