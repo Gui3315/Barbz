@@ -10,8 +10,9 @@ import { Link } from "react-router-dom"
 import { getAvailableTimeSlots, getAvailableBarbersForSlot } from "@/utils/availabilityUtils"
 import { ClientLayout } from "@/components/client/layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar, User, LogOut, Camera, Save, Clock, Scissors, MapPin, CheckCircle, History, ClockIcon, X } from "lucide-react"
+import { Calendar, User, LogOut, Camera, Save, Clock, Scissors, MapPin, CheckCircle, History, ClockIcon, X, ChevronLeft, ChevronRight } from "lucide-react"
 import { createPortal } from "react-dom"
+
 
 // Função para gerar slots de horário baseado no horário de abertura e fechamento
 function generateTimeSlots(openTime: string, closeTime: string, intervalMinutes = 30): string[] {
@@ -35,6 +36,10 @@ function generateTimeSlots(openTime: string, closeTime: string, intervalMinutes 
 
   return slots
 }
+
+// No início do componente Cliente
+const [touchStartX, setTouchStartX] = useState<number | null>(null);
+const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
 // Função utilitária para criar datas no fuso correto
 const createLocalDateTime = (date, time) => {
@@ -84,6 +89,8 @@ export default function Cliente() {
   const [rescheduleTime, setRescheduleTime] = useState("")
   const [rescheduleAvailableSlots, setRescheduleAvailableSlots] = useState([])
   const [rescheduleLoading, setRescheduleLoading] = useState(false)
+  // Estado para carrossel de agendamentos
+const [currentAppointmentIndex, setCurrentAppointmentIndex] = useState(0)
 
   // Função para buscar horários disponíveis para reagendamento
 const fetchAvailableSlotsForReschedule = async (appointmentId, barberId, serviceId, date, barbershopId) => {
@@ -902,6 +909,7 @@ useEffect(() => {
                   <h2 className="text-2xl font-bold text-slate-800">Meus Agendamentos</h2>
                   <p className="text-slate-600">Visualize e gerencie seus próximos horários</p>
                 </div>
+                </div>
                 
 
                 {appointmentsLoading ? (
@@ -922,8 +930,42 @@ useEffect(() => {
                     </button>
                   </div>
                 ) : (
-                  <div className="grid gap-4">
-                    {userAppointments.map((appointment) => {
+                <div className="relative">
+                  {/* Navegação do carrossel */}
+                  <div className="flex justify-between items-center mb-4">
+                    <button
+                      onClick={() => setCurrentAppointmentIndex(Math.max(0, currentAppointmentIndex - 1))}
+                      disabled={currentAppointmentIndex === 0}
+                      className="p-2 rounded-full bg-white border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                    
+                    <div className="flex gap-2">
+                      {userAppointments.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setCurrentAppointmentIndex(index)}
+                          className={`w-2 h-2 rounded-full transition-colors ${
+                            index === currentAppointmentIndex ? 'bg-blue-600' : 'bg-slate-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    
+                    <button
+                      onClick={() => setCurrentAppointmentIndex(Math.min(userAppointments.length - 1, currentAppointmentIndex + 1))}
+                      disabled={currentAppointmentIndex === userAppointments.length - 1}
+                      className="p-2 rounded-full bg-white border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 transition-colors"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  </div>
+                  
+                  {/* Card atual */}
+                  <div className="overflow-hidden">
+                    {(() => {
+                      const appointment = userAppointments[currentAppointmentIndex];
                       const startDate = new Date(appointment.start_at.substring(0, 19))
                       const service = appointment.appointment_services?.[0]
                       const status = appointment.status
@@ -942,7 +984,7 @@ useEffect(() => {
                       return (
                         <div
                           key={appointment.id}
-                          className={`bg-white rounded-xl border-2 p-6 shadow-lg transition-all duration-200 ${
+                          className={`bg-white rounded-xl border-2 p-4 sm:p-6 shadow-lg transition-all duration-200 w-full ${
                             isCancelled 
                               ? "border-red-200 bg-red-50" 
                               : isConfirmed 
@@ -967,7 +1009,7 @@ useEffect(() => {
                                 )}
                                 <span>{appointment.barbershops?.name}</span>
                               </div>
-                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                <span className={`px-0 py-1 rounded-full text-xs font-medium ${
                                   isCancelled 
                                     ? "bg-red-100 text-red-700"
                                     : isConfirmed 
@@ -1016,7 +1058,7 @@ useEffect(() => {
 														</div>
                           </div>
                           
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                          <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:gap-4 text-sm">
                             <div className="space-y-1">
                               <p className="text-slate-500">Horário</p>
                               <p className="font-semibold text-slate-800">
@@ -1056,11 +1098,11 @@ useEffect(() => {
                             </div>
                           )}
                         </div>
-                      )
-                    })}
+                      );
+                    })()}
                   </div>
-                )}</div>
-            </TabsContent>
+                </div>
+  )}</TabsContent>
 
 {/* Modal de Reagendamento */}
 {isRescheduling && reschedulingAppointment && createPortal(
