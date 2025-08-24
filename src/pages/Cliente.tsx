@@ -461,9 +461,11 @@ if (startAtRaw) {
       ? startAtRaw.replace(" ", "T")
       : startAtRaw
   );
+
   if (!isNaN(dateObj.getTime())) {
-    cancelledDateStr = dateObj.toLocaleDateString('pt-BR');
-    cancelledTimeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    // Exibe em UTC exatamente como está no banco
+    cancelledDateStr = dateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
+    cancelledTimeStr = dateObj.toISOString().slice(11, 16);
   } else {
     cancelledDateStr = "Data inválida";
     cancelledTimeStr = "Hora inválida";
@@ -483,7 +485,7 @@ if (ownerId) {
     body: JSON.stringify({
       userId: ownerId,
       title: "Agendamento cancelado",
-      body: `TESTE Cliente ${profileData?.user_name || ""} cancelou o horário de ${cancelledDateStr} às ${cancelledTimeStr}.`
+      body: `TESTE2 Cliente ${profileData?.user_name || ""} cancelou o horário de ${cancelledDateStr} às ${cancelledTimeStr}.`
     })
   });
 }
