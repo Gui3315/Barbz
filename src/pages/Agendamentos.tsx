@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { CalendarIcon, Clock, Plus } from "lucide-react"
+import { CalendarIcon, Clock, Plus, X, ChevronLeft, ChevronRight, User, Calendar as CalendarIcon2 } from "lucide-react"
 import {
   Select,
   SelectTrigger,
@@ -19,7 +19,8 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabaseClient"
-// ...existing code...
+import { createPortal } from "react-dom"
+
 
 // Types for appointments, barbers, and services
 interface Appointment {
@@ -84,6 +85,15 @@ export default function Agendamentos() {
   // Horários disponíveis para o barbeiro/serviço/data selecionados
   const [availableTimes, setAvailableTimes] = useState<string[]>([])
   const [loadingTimes, setLoadingTimes] = useState(false)
+
+  // Estados para reagendamento (proprietário)
+  const [isRescheduling, setIsRescheduling] = useState(false)
+  const [reschedulingAppointment, setReschedulingAppointment] = useState(null)
+  const [rescheduleDate, setRescheduleDate] = useState("")
+  const [rescheduleTime, setRescheduleTime] = useState("")
+  const [rescheduleAvailableSlots, setRescheduleAvailableSlots] = useState([])
+  const [rescheduleLoading, setRescheduleLoading] = useState(false)
+
   // Função para gerar horários disponíveis considerando agendamentos existentes
   useEffect(() => {
     const fetchAvailableTimes = async () => {
@@ -420,15 +430,228 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
     }
   }
 
-  const handleCancelAppointment = async (id: string) => {
-    const { error } = await supabase.from("appointments").delete().eq("id", id)
-    if (!error) {
-      setAppointments(appointments.filter((appointment) => appointment.id !== id))
-      toast({
-        title: "Agendamento cancelado",
-        description: "O agendamento foi cancelado com sucesso.",
-      })
+  const handleCancelAppointment = async (appointmentId: string) => {
+    if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return
+    
+    try {
+    const { error } = await supabase
+    .from("appointments")
+    .update({status: "cancelled"})
+    .eq("id", appointmentId)
+
+    if (error) throw error
+      
+    alert("Agendamento cancelado com sucesso!")
+
+    const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
+    let barbershopId = null
+    if (user) {
+      const { data: barbershop } = await supabase.from("barbershops").select("id").eq("owner_id", user.id).single()
+      if (barbershop) {
+        barbershopId = barbershop.id
+      }
     }
+    if (barbershopId && selectedDate) {
+      const year = selectedDate.getFullYear()
+      const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
+      const day = String(selectedDate.getDate()).padStart(2, "0")
+      const startDate = `${year}-${month}-${day}T00:00:00`
+      const endDate = `${year}-${month}-${day}T23:59:59`
+      const { data } = await supabase.rpc("get_appointments_with_clients", {
+        p_barbershop_id: barbershopId,
+        p_start_date: startDate,
+        p_end_date: endDate,
+      })
+      setAppointments(
+        (data || []).map((a: any) => ({
+          id: a.id,
+          start_at: a.start_at,
+          end_at: a.end_at,
+          status: a.status,
+          total_price: a.total_price,
+          notes: a.notes,
+          client: { name: a.client_name },
+          service: { name: a.service_name },
+          barber: { name: a.barber_name },
+          duration_minutes_snapshot: a.duration_minutes_snapshot,
+        }))
+      )
+    }    
+    
+  } catch (error) {
+    console.error("Erro ao cancelar agendamento:", error)
+    alert("Erro ao cancelar agendamento. Tente novamente.")
+  }
+}
+
+  // Função utilitária para criar datas no fuso correto
+  const createLocalDateTime = (date, time) => {
+    const dateTimeString = `${date}T${time}:00.000`;
+    return new Date(dateTimeString);
+  };
+
+  // Gerar datas para os próximos 30 dias
+  const getAvailableDates = () => {
+    const dates = []
+    const today = new Date()
+    
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(today)
+      date.setDate(today.getDate() + i)
+      dates.push(date.toISOString().split('T')[0])
+    }
+    
+    return dates
+  }
+
+  // Função para buscar horários disponíveis para reagendamento
+  const fetchAvailableSlotsForReschedule = async (appointmentId, barberId, serviceId, date, barbershopId) => {
+    if (!barberId || !serviceId || !date || !barbershopId) {
+      console.error("Parâmetros faltando para reagendamento:", { appointmentId, barberId, serviceId, date, barbershopId })
+      setRescheduleAvailableSlots([])
+      return
+    }
+
+    try {
+      setRescheduleLoading(true)
+      
+      // Usar a função unificada do availabilityUtils
+      const availableSlots = await getAvailableTimeSlots(
+        barberId,
+        serviceId,
+        date,
+        barbershopId
+      )
+      
+      console.log(`Total slots disponíveis para reagendamento:`, availableSlots)
+      setRescheduleAvailableSlots(availableSlots)
+      
+    } catch (error) {
+      console.error("Erro ao buscar horários:", error)
+      setRescheduleAvailableSlots([])
+    } finally {
+      setRescheduleLoading(false)
+    }
+  }
+
+  // Função para iniciar reagendamento
+  const startRescheduling = (appointment) => {
+    setReschedulingAppointment(appointment)
+    setIsRescheduling(true)
+    setRescheduleDate("")
+    setRescheduleTime("")
+    setRescheduleAvailableSlots([])
+  }
+
+  // Função para confirmar reagendamento
+  const confirmReschedule = async () => {
+    if (!reschedulingAppointment || !rescheduleDate || !rescheduleTime) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Por favor, selecione uma nova data e horário",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    try {
+      setRescheduleLoading(true)
+      
+      // Buscar duração do serviço
+      const { data: appointmentServices } = await supabase
+        .from("appointment_services")
+        .select("duration_minutes_snapshot")
+        .eq("appointment_id", reschedulingAppointment.id)
+        .single()
+      
+      const duration = appointmentServices?.duration_minutes_snapshot || 30
+      
+      // Criar horários locais e salvar como UTC no banco
+      const newStartDateTime = createLocalDateTime(rescheduleDate, rescheduleTime);
+      const newStartDateTimeUTC = new Date(newStartDateTime.getTime() - (3 * 60 * 60 * 1000));
+      const newEndDateTime = new Date(newStartDateTimeUTC.getTime() + duration * 60000);
+      
+      // Atualizar o agendamento
+      const { error } = await supabase
+        .from("appointments")
+        .update({
+          start_at: newStartDateTimeUTC.toISOString(),
+          end_at: newEndDateTime.toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", reschedulingAppointment.id)
+      
+      if (error) throw error
+      
+      toast({
+        title: "Agendamento reagendado",
+        description: "Agendamento reagendado com sucesso!",
+      })
+      
+      // Recarregar lista de agendamentos
+      const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
+      let barbershopId = null
+      if (user) {
+        const { data: barbershop } = await supabase.from("barbershops").select("id").eq("owner_id", user.id).single()
+        if (barbershop) {
+          barbershopId = barbershop.id
+        }
+      }
+
+      if (barbershopId && selectedDate) {
+        const year = selectedDate.getFullYear()
+        const month = String(selectedDate.getMonth() + 1).padStart(2, "0")
+        const day = String(selectedDate.getDate()).padStart(2, "0")
+        const startDate = `${year}-${month}-${day}T00:00:00`
+        const endDate = `${year}-${month}-${day}T23:59:59`
+        const { data } = await supabase.rpc("get_appointments_with_clients", {
+          p_barbershop_id: barbershopId,
+          p_start_date: startDate,
+          p_end_date: endDate,
+        })
+        
+        setAppointments(
+          (data || []).map((a) => ({
+            id: a.id,
+            start_at: a.start_at,
+            end_at: a.end_at,
+            status: a.status,
+            total_price: a.total_price,
+            notes: a.notes,
+            client: { name: a.client_name },
+            service: { name: a.service_name },
+            barber: { name: a.barber_name },
+            duration_minutes_snapshot: a.duration_minutes_snapshot,
+          }))
+        )
+      }
+      
+      // Limpar estado de reagendamento
+      setIsRescheduling(false)
+      setReschedulingAppointment(null)
+      setRescheduleDate("")
+      setRescheduleTime("")
+      setRescheduleAvailableSlots([])
+      
+    } catch (error) {
+      console.error("Erro ao reagendar:", error)
+      toast({
+        title: "Erro ao reagendar",
+        description: "Erro ao reagendar agendamento. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setRescheduleLoading(false)
+    }
+  }
+
+  // Cancelar reagendamento
+  const cancelReschedule = () => {
+    setIsRescheduling(false)
+    setReschedulingAppointment(null)
+    setRescheduleDate("")
+    setRescheduleTime("")
+    setRescheduleAvailableSlots([])
   }
 
   return (
@@ -621,9 +844,11 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
                     <div
                       key={appointment.id}
                       className={`p-4 backdrop-blur-sm rounded-xl flex items-center justify-between transition-all hover:shadow-md ${
-                        appointment.status === "pending"
-                          ? "bg-gradient-to-r from-amber-50/80 to-amber-100/60 border border-amber-200/50"
-                          : "bg-gradient-to-r from-green-50/80 to-green-100/60 border border-green-200/50"
+                        appointment.status === "confirmed"
+                        ? "border-green-200 bg-green-50"
+                        : appointment.status === "cancelled"
+                        ? "border-red-200 bg-red-50"
+                        : "border-amber-200 bg-amber-50"
                       }${idx !== 0 ? " mt-3" : ""}`}
                     >
                       <div className="flex items-center">
@@ -637,8 +862,27 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
                             : "CN"}
                         </div>
                         <div className="ml-4">
-                          <div className="font-semibold text-slate-800">{appointment.client?.name || "Cliente não informado"}</div>
-                          <div className="text-sm text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <div className="font-semibold text-slate-800">
+                            {appointment.client?.name || "Cliente não informado"}
+                          </div>
+                          {/* Badge de status */}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium
+                            ${appointment.status === "cancelled"
+                              ? "bg-red-100 text-red-700"
+                              : appointment.status === "confirmed"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-amber-100 text-amber-700"
+                            }`
+                          }>
+                            {appointment.status === "cancelled"
+                              ? "Cancelado"
+                              : appointment.status === "confirmed"
+                              ? "Confirmado"
+                              : "Pendente"}
+                          </span>
+                        </div>
+                        <div className="text-sm text-slate-600">
                           <div>{appointment.service?.name || "Serviço selecionado"}</div>
                           {appointment.duration_minutes_snapshot && (
                             <span className="text-xs text-slate-500">
@@ -646,8 +890,28 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
                             </span>
                           )}
                         </div>
-                        </div>
                       </div>
+                      </div>
+                    <div className="flex flex-col items-end">
+                      {/* Botões de ação */}
+                      {appointment.status !== "cancelled" && (
+                        <div className="flex flex-row gap-2 mb-2">
+                          <button
+                            onClick={() => startRescheduling(appointment)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors duration-200"
+                            title="Reagendar"
+                          >
+                            <CalendarIcon2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleCancelAppointment(appointment.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors duration-200"
+                            title="Cancelar agendamento"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      )}
                       <div className="flex flex-col items-end">
                       <div className="flex items-center text-slate-700">
                         <Clock size={14} className="mr-2 text-blue-600" />
@@ -657,9 +921,12 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
                             : "--:--"}
                         </span>
                       </div>
-                      <div className="text-sm text-slate-500 mt-1">{appointment.barber?.name || "Barbeiro"}</div>
+                      <div className="flex flex-col items-end">
+                        <div className="text-sm text-slate-500 mb-2">{appointment.barber?.name || "Barbeiro"}</div>
+                        </div>
+                        </div>
                     </div>
-                    </div>
+                  </div>
                   ))
                 )}
               </CardContent>
@@ -684,6 +951,162 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
           </div>
         </div>
       </div>
+      {/* Modal de Reagendamento */}
+        {isRescheduling && reschedulingAppointment && createPortal(
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-bold text-slate-800">Reagendar Horário</h3>
+                  <button
+                    onClick={cancelReschedule}
+                    className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+                
+                <div className="space-y-4 mb-6">
+                  <div className="bg-slate-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-slate-800 mb-2">Agendamento Atual</h4>
+                    <div className="text-sm text-slate-600 space-y-1">
+                      <p><strong>Cliente:</strong> {reschedulingAppointment.client?.name}</p>
+                      <p><strong>Barbeiro:</strong> {reschedulingAppointment.barber?.name}</p>
+                      <p><strong>Serviço:</strong> {reschedulingAppointment.service?.name}</p>
+                      <p><strong>Data atual:</strong> {new Date(reschedulingAppointment.start_at.substring(0, 19)).toLocaleDateString('pt-BR')}</p>
+                      <p><strong>Horário atual:</strong> {new Date(reschedulingAppointment.start_at.substring(0, 19)).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">
+                        Nova Data
+                      </label>
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                        {getAvailableDates().map((date) => {
+                          const dateObj = new Date(date + 'T00:00:00')
+                          const dayName = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' })
+                          const dayNumber = dateObj.getDate()
+                          const monthName = dateObj.toLocaleDateString('pt-BR', { month: 'short' })
+                          
+                          return (
+                            <button
+                              key={date}
+                              onClick={() => {
+                                setRescheduleDate(date)
+                                setRescheduleTime("") // Limpar horário selecionado
+                                
+                                // Buscar barbershop_id
+                                const fetchBarbershopAndSlots = async () => {
+                                  const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
+                                  let barbershopId = null
+                                  if (user) {
+                                    const { data: barbershop } = await supabase.from("barbershops").select("id").eq("owner_id", user.id).single()
+                                    if (barbershop) {
+                                      barbershopId = barbershop.id
+                                    }
+                                  }
+
+                                  if (barbershopId) {
+                                    // Buscar service_id do appointment_services
+                                    const { data: appointmentService } = await supabase
+                                      .from("appointment_services")
+                                      .select("service_id")
+                                      .eq("appointment_id", reschedulingAppointment.id)
+                                      .single()
+                                    
+                                    if (appointmentService?.service_id) {
+                                      // Buscar barber_id do próprio appointment
+                                      const barberId = reschedulingAppointment.id ? 
+                                        (await supabase.from("appointments").select("barber_id").eq("id", reschedulingAppointment.id).single()).data?.barber_id 
+                                        : null
+
+                                      if (barberId) {
+                                        fetchAvailableSlotsForReschedule(
+                                          reschedulingAppointment.id,
+                                          barberId,
+                                          appointmentService.service_id,
+                                          date,
+                                          barbershopId
+                                        )
+                                      }
+                                    }
+                                  }
+                                }
+                                fetchBarbershopAndSlots()
+                              }}
+                              className={`p-2 border-2 rounded-lg transition-all duration-200 text-center ${
+                                rescheduleDate === date
+                                  ? "border-blue-500 bg-blue-50"
+                                  : "border-gray-200 hover:border-blue-300 hover:bg-blue-50"
+                              }`}
+                            >
+                              <div className="text-xs text-slate-600 uppercase">{dayName}</div>
+                              <div className="text-sm font-semibold text-slate-800">{dayNumber}</div>
+                              <div className="text-xs text-slate-600">{monthName}</div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    
+                    {rescheduleDate && (
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-2">
+                          Novo Horário
+                        </label>
+                        {rescheduleLoading ? (
+                          <div className="text-center py-4">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="text-slate-600 text-sm mt-2">Buscando horários...</p>
+                          </div>
+                        ) : rescheduleAvailableSlots.length === 0 ? (
+                          <p className="text-slate-600 text-center py-4">
+                            Nenhum horário disponível para esta data.
+                          </p>
+                        ) : (
+                          <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                            {rescheduleAvailableSlots.map((time) => (
+                              <button
+                                key={time}
+                                onClick={() => setRescheduleTime(time)}
+                                className={`p-2 border-2 rounded-lg transition-all duration-200 text-center font-medium ${
+                                  rescheduleTime === time
+                                    ? "border-green-500 bg-green-50"
+                                    : "border-gray-200 hover:border-green-300 hover:bg-green-50"
+                                }`}
+                              >
+                                {time}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={cancelReschedule}
+                    className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmReschedule}
+                    disabled={!rescheduleDate || !rescheduleTime || rescheduleLoading}
+                    className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {rescheduleLoading ? "Reagendando..." : "Confirmar Reagendamento"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </DashboardLayout>
   )
 }

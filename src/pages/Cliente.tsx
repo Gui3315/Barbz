@@ -165,11 +165,11 @@ const fetchAvailableSlotsForReschedule = async (appointmentId, barberId, service
     const dayIndex = new Date(date + 'T00:00:00').getDay()
     const weekDays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
     const selectedDayKey = weekDays[dayIndex]
-    
+
     const { data: schedule, error: scheduleError } = await supabase
-      .from("salon_schedule")
+      .from("barber_schedule")
       .select("open, close, active")
-      .eq("barbershop_id", barbershopId)
+      .eq("barber_id", barberId)
       .eq("day", selectedDayKey)
       .single()
 
@@ -1151,6 +1151,7 @@ useEffect(() => {
                         setRescheduleTime("") // Limpar horário selecionado
                         
                         const service = reschedulingAppointment.appointment_services?.[0]
+                        console.log(service)
                         if (service && service.service_id) {
                           fetchAvailableSlotsForReschedule(
                             reschedulingAppointment.id,
