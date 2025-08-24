@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { create, getNumericDate, Jose, Payload } from "https://deno.land/x/djwt@v2.8/mod.ts";
 
 // DADOS DO SEU JSON:
 const PROJECT_ID = "barbz-2d089";
@@ -34,14 +35,27 @@ o6X+/TojlFvEdnibG9SvhMbxr3g4W1Y3BKxaPbZnwrdylKvbgejN2bAs+AltKD4u
 gWGliqxs24kHWHOK+Kn0Wt8=
 -----END PRIVATE KEY-----`;
 
+async function importPrivateKey(pem: string): Promise<CryptoKey> {
+  // Remove header, footer, and line breaks
+  const pemContents = pem
+    .replace("-----BEGIN PRIVATE KEY-----", "")
+    .replace("-----END PRIVATE KEY-----", "")
+    .replace(/\s/g, "");
+  const binaryDer = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
+  return await crypto.subtle.importKey(
+    "pkcs8",
+    binaryDer.buffer,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+}
+
 async function getAccessToken() {
-  const header = {
-    alg: "RS256",
-    typ: "JWT",
-  };
-  const iat = Math.floor(Date.now() / 1000);
-  const exp = iat + 60 * 60;
-  const payload = {
+  const iat = getNumericDate(0);
+  const exp = getNumericDate(60 * 60); // 1 hora
+
+  const payload: Payload = {
     iss: SERVICE_ACCOUNT_EMAIL,
     scope: "https://www.googleapis.com/auth/firebase.messaging",
     aud: "https://oauth2.googleapis.com/token",
@@ -49,22 +63,19 @@ async function getAccessToken() {
     exp,
   };
 
-  function toBase64(obj: any) {
-    return base64Encode(new TextEncoder().encode(JSON.stringify(obj)));
-  }
+  const header: Jose = {
+    alg: "RS256",
+    typ: "JWT",
+  };
 
-  const unsignedToken = `${toBase64(header)}.${toBase64(payload)}`;
-  // ATENÇÃO: Deno pode precisar de uma lib externa para assinar o JWT com RS256.
-  // Veja https://deno.land/x/djwt ou https://deno.land/x/jose para assinar o JWT.
-  // Aqui está um exemplo usando djwt:
-  // import { makeJwt, setExpiration, Jose, Payload } from "https://deno.land/x/djwt@v2.8/mod.ts";
-  // ... (implemente a assinatura do JWT aqui) ...
+  const cryptoKey = await importPrivateKey(PRIVATE_KEY);
 
-  // Após gerar o JWT, troque por access_token:
+  const jwt = await create(header, payload, cryptoKey);
+
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${unsignedToken}`,
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
   });
   const data = await res.json();
   return data.access_token;
@@ -109,7 +120,7 @@ serve(async (req) => {
   const accessToken = await getAccessToken();
 
   for (const { token } of tokens) {
-    await fetch(`https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`, {
+    const fcmRes = await fetch(`https://fcm.googleapis.com/v1/projects/${PROJECT_ID}/messages:send`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${accessToken}`,
@@ -122,6 +133,8 @@ serve(async (req) => {
         },
       }),
     });
+    const fcmText = await fcmRes.text();
+    console.log("FCM response:", fcmRes.status, fcmText);
   }
 
   return new Response("Notificações enviadas!", {

@@ -336,6 +336,7 @@ const confirmReschedule = async () => {
   const ownerId = reschedulingAppointment?.barbershops?.owner_id;
   if (ownerId) {
       console.log("Enviando push para o proprietário:", ownerId);
+      console.log("Enviando notificação push para reagendamento", ownerId, reschedulingAppointment.id);
     await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
       method: "POST",
       headers: {
