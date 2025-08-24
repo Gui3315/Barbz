@@ -71,6 +71,18 @@ async function getAccessToken() {
 }
 
 serve(async (req) => {
+  // --- CORS preflight handler ---
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      headers: {
+        "Access-Control-Allow-Origin": "https://barbz.vercel.app",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    });
+  }
+
+  // --- Normal POST handler ---
   const { userId, title, body } = await req.json();
 
   const supabase = createClient(
@@ -84,7 +96,14 @@ serve(async (req) => {
     .eq("user_id", userId);
 
   if (!tokens || tokens.length === 0) {
-    return new Response("Nenhum token encontrado", { status: 404 });
+    return new Response("Nenhum token encontrado", {
+      status: 404,
+      headers: {
+        "Access-Control-Allow-Origin": "https://barbz.vercel.app",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
+    });
   }
 
   const accessToken = await getAccessToken();
@@ -105,5 +124,11 @@ serve(async (req) => {
     });
   }
 
-  return new Response("Notificações enviadas!");
+  return new Response("Notificações enviadas!", {
+    headers: {
+      "Access-Control-Allow-Origin": "https://barbz.vercel.app",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
 });
