@@ -589,74 +589,73 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
     }
     
     try {
-      setRescheduleLoading(true)
-      
-      // Buscar duração do serviço
-      const { data: appointmentServices } = await supabase
-        .from("appointment_services")
-        .select("duration_minutes_snapshot")
-        .eq("appointment_id", reschedulingAppointment.id)
-        .single()
-      
-      const duration = appointmentServices?.duration_minutes_snapshot || 30
-      
-      // Criar horários locais e salvar como UTC no banco
-      const newStartDateTime = createLocalDateTime(rescheduleDate, rescheduleTime);
-      const newStartDateTimeUTC = new Date(newStartDateTime.getTime() - (3 * 60 * 60 * 1000));
-      const newEndDateTime = new Date(newStartDateTimeUTC.getTime() + duration * 60000);
-      
-      // Atualizar o agendamento
-      const { error } = await supabase
-        .from("appointments")
-        .update({
-          start_at: newStartDateTimeUTC.toISOString(),
-          end_at: newEndDateTime.toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", reschedulingAppointment.id)
-      
-      if (error) throw error
-      
-      toast({
-        title: "Agendamento reagendado",
-        description: "Agendamento reagendado com sucesso!",
+    setRescheduleLoading(true)
+
+    // Buscar duração do serviço
+    const { data: appointmentServices } = await supabase
+      .from("appointment_services")
+      .select("duration_minutes_snapshot")
+      .eq("appointment_id", reschedulingAppointment.id)
+      .single()
+
+    const duration = appointmentServices?.duration_minutes_snapshot || 30
+
+    // Salvar o horário antigo ANTES do update!
+    const oldDateObj = new Date(reschedulingAppointment.start_at)
+    const oldDateStr = oldDateObj.toISOString().slice(0, 10).split('-').reverse().join('/')
+    const oldTimeStr = oldDateObj.toISOString().slice(11, 16)
+
+    // Criar horários locais e salvar como UTC no banco
+    const newStartDateTime = createLocalDateTime(rescheduleDate, rescheduleTime)
+    const newStartDateTimeUTC = new Date(newStartDateTime.getTime() - (3 * 60 * 60 * 1000))
+    const newEndDateTime = new Date(newStartDateTimeUTC.getTime() + duration * 60000)
+
+    // Atualizar o agendamento
+    const { error } = await supabase
+      .from("appointments")
+      .update({
+        start_at: newStartDateTimeUTC.toISOString(),
+        end_at: newEndDateTime.toISOString(),
+        updated_at: new Date().toISOString()
       })
+      .eq("id", reschedulingAppointment.id)
 
-      // Notificar o cliente sobre o reagendamento
-      // Buscar dados atualizados do agendamento para pegar client_id e start_at antigo
-      const { data: appointment } = await supabase
-        .from("appointments")
-        .select("client_id, start_at")
-        .eq("id", reschedulingAppointment.id)
-        .single();
+    if (error) throw error
 
-      const clientId = appointment?.client_id;
-      const oldDateObj = new Date(appointment?.start_at);
-      const oldDateStr = oldDateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
-      const oldTimeStr = oldDateObj.toISOString().slice(11, 16);
+    toast({
+      title: "Agendamento reagendado",
+      description: "Agendamento reagendado com sucesso!",
+    })
 
-      const newDateObj = new Date(newStartDateTimeUTC);
-      const newDateStr = newDateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
-      const newTimeStr = newDateObj.toISOString().slice(11, 16);
+    // Buscar client_id atualizado
+    const { data: appointment } = await supabase
+      .from("appointments")
+      .select("client_id")
+      .eq("id", reschedulingAppointment.id)
+      .single()
 
-      if (clientId) {
-        // Pegue o token do usuário autenticado
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
+    const clientId = appointment?.client_id
+    const newDateObj = new Date(newStartDateTimeUTC)
+    const newDateStr = newDateObj.toISOString().slice(0, 10).split('-').reverse().join('/')
+    const newTimeStr = newDateObj.toISOString().slice(11, 16)
 
-        await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            userId: clientId,
-            title: "Horário reagendado",
-            body: `Seu agendamento foi reagendado de ${oldDateStr} às ${oldTimeStr} para ${newDateStr} às ${newTimeStr}.`
-          })
-        });
-      }
+    if (clientId) {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
+      await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: clientId,
+          title: "Horário reagendado",
+          body: `Seu agendamento foi reagendado de ${oldDateStr} às ${oldTimeStr} para ${newDateStr} às ${newTimeStr}.`
+        })
+      })
+    }
       
       // Recarregar lista de agendamentos
       const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
