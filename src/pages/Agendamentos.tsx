@@ -600,10 +600,16 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
 
     const duration = appointmentServices?.duration_minutes_snapshot || 30
 
-    // Salvar o horário antigo ANTES do update!
-    const oldDateObj = new Date(reschedulingAppointment.start_at)
-    const oldDateStr = oldDateObj.toISOString().slice(0, 10).split('-').reverse().join('/')
-    const oldTimeStr = oldDateObj.toISOString().slice(11, 16)
+    // Buscar o horário antigo do banco antes do update
+    const { data: oldAppointment } = await supabase
+      .from("appointments")
+      .select("start_at")
+      .eq("id", reschedulingAppointment.id)
+      .single();
+
+    const oldDateObj = new Date(oldAppointment?.start_at);
+    const oldDateStr = oldDateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
+    const oldTimeStr = oldDateObj.toISOString().slice(11, 16);
 
     // Criar horários locais e salvar como UTC no banco
     const newStartDateTime = createLocalDateTime(rescheduleDate, rescheduleTime)
