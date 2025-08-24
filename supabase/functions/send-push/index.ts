@@ -71,7 +71,7 @@ async function getAccessToken() {
 }
 
 serve(async (req) => {
-  // --- CORS preflight handler ---
+  // Trate o OPTIONS antes de qualquer outra coisa!
   if (req.method === "OPTIONS") {
     return new Response(null, {
       headers: {
