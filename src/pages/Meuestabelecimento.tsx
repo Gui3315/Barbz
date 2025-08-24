@@ -358,28 +358,33 @@ useEffect(() => {
     }
   }
 
-  // Remove barber
   const handleRemoveBarber = async (barberId: string) => {
-    if (!window.confirm("Tem certeza que deseja remover este barbeiro?")) return
-    const { error } = await supabase.from("barbers").delete().eq("id", barberId)
-    if (!error) {
-      toast({ title: "Barbeiro removido!" })
-      setEditId(null)
-      setEditBarber(null)
-      // Refresh list
-      const { data: shop } = await supabase.from("barbershops").select("id").eq("owner_id", user?.id).maybeSingle()
-      if (shop) {
+  if (!window.confirm("Tem certeza que deseja remover este barbeiro?")) return
+
+  // Remover horários do barbeiro em todas as tabelas relacionadas
+  await supabase.from("barber_schedule").delete().eq("barber_id", barberId)
+  await supabase.from("barber_working_hours").delete().eq("barber_id", barberId)
+
+  // Agora pode remover o barbeiro
+  const { error } = await supabase.from("barbers").delete().eq("id", barberId)
+  if (!error) {
+    toast({ title: "Barbeiro removido!" })
+    setEditId(null)
+    setEditBarber(null)
+    // Refresh list
+    const { data: shop } = await supabase.from("barbershops").select("id").eq("owner_id", user?.id).maybeSingle()
+    if (shop) {
       const { data } = await supabase
         .from("barbers")
         .select("id, name, phone, is_active, lunch_start, lunch_end, created_at")
         .eq("barbershop_id", shop.id)
         .order("created_at", { ascending: true })
       setBarbers(data || [])
-      }
-    } else {
-      toast({ title: "Erro ao remover barbeiro", description: error.message, variant: "destructive" })
     }
+  } else {
+    toast({ title: "Erro ao remover barbeiro", description: error.message, variant: "destructive" })
   }
+}
 
   // Horários e dias de funcionamento
   const weekDays = [

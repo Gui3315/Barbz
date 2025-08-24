@@ -623,8 +623,15 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
       })
 
       // Notificar o cliente sobre o reagendamento
-      const clientId = reschedulingAppointment?.client?.id;
-      const oldDateObj = new Date(reschedulingAppointment.start_at);
+      // Buscar dados atualizados do agendamento para pegar client_id e start_at antigo
+      const { data: appointment } = await supabase
+        .from("appointments")
+        .select("client_id, start_at")
+        .eq("id", reschedulingAppointment.id)
+        .single();
+
+      const clientId = appointment?.client_id;
+      const oldDateObj = new Date(appointment?.start_at);
       const oldDateStr = oldDateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
       const oldTimeStr = oldDateObj.toISOString().slice(11, 16);
 
@@ -633,23 +640,23 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
       const newTimeStr = newDateObj.toISOString().slice(11, 16);
 
       if (clientId) {
-      // Pegue o token do usuário autenticado
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+        // Pegue o token do usuário autenticado
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
 
-      await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          userId: clientId,
-          title: "Horário reagendado",
-          body: `Seu agendamento foi reagendado de ${oldDateStr} às ${oldTimeStr} para ${newDateStr} às ${newTimeStr}.`
-        })
-      });
-    }
+        await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            userId: clientId,
+            title: "Horário reagendado",
+            body: `Seu agendamento foi reagendado de ${oldDateStr} às ${oldTimeStr} para ${newDateStr} às ${newTimeStr}.`
+          })
+        });
+      }
       
       // Recarregar lista de agendamentos
       const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null

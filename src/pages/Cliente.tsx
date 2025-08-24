@@ -945,6 +945,22 @@ useEffect(() => {
   }
 }, [profileData?.id]);
 
+useEffect(() => {
+      if (activeTab === "meus-agendamentos" && profileData?.id) {
+        fetchUserAppointments();
+      }
+    }, [activeTab, profileData?.id]);
+
+    useEffect(() => {
+  if (activeTab === "agendamento") {
+    fetchBarbershops();
+    if (selectedBarbershop) {
+      fetchServices(selectedBarbershop.id);
+      fetchBarbers(selectedBarbershop.id);
+    }
+  }
+}, [activeTab, selectedBarbershop]);
+
   return (
     <ClientLayout>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-amber-50/20">
