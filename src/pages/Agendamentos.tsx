@@ -431,17 +431,46 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
   }
 
   const handleCancelAppointment = async (appointmentId: string) => {
-    if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return
-    
-    try {
+  if (!confirm("Tem certeza que deseja cancelar este agendamento?")) return
+
+  try {
+    // Buscar dados do agendamento para pegar client_id e start_at
+    const { data: appointment } = await supabase
+      .from("appointments")
+      .select("client_id, start_at")
+      .eq("id", appointmentId)
+      .single();
+
     const { error } = await supabase
-    .from("appointments")
-    .update({status: "cancelled"})
-    .eq("id", appointmentId)
+      .from("appointments")
+      .update({ status: "cancelled" })
+      .eq("id", appointmentId);
 
     if (error) throw error
-      
+
     alert("Agendamento cancelado com sucesso!")
+
+    // Notificar o cliente
+    const clientId = appointment?.client_id;
+    const startAtRaw = appointment?.start_at;
+    if (clientId && startAtRaw) {
+      const dateObj = new Date(startAtRaw);
+      const dateStr = dateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
+      const timeStr = dateObj.toISOString().slice(11, 16);
+
+      await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer SEU_TOKEN"
+        },
+        body: JSON.stringify({
+          userId: clientId,
+          title: "Agendamento cancelado",
+          body: `Seu agendamento para ${dateStr} às ${timeStr} foi cancelado pelo barbeiro.`
+        })
+      });
+    }
 
     const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
     let barbershopId = null
@@ -587,6 +616,31 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
         title: "Agendamento reagendado",
         description: "Agendamento reagendado com sucesso!",
       })
+
+      // Notificar o cliente sobre o reagendamento
+      const clientId = reschedulingAppointment?.client?.id;
+      const oldDateObj = new Date(reschedulingAppointment.start_at);
+      const oldDateStr = oldDateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
+      const oldTimeStr = oldDateObj.toISOString().slice(11, 16);
+
+      const newDateObj = new Date(newStartDateTimeUTC);
+      const newDateStr = newDateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
+      const newTimeStr = newDateObj.toISOString().slice(11, 16);
+
+      if (clientId) {
+        await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer SEU_TOKEN"
+          },
+          body: JSON.stringify({
+            userId: clientId,
+            title: "Horário reagendado",
+            body: `Seu agendamento foi reagendado de ${oldDateStr} às ${oldTimeStr} para ${newDateStr} às ${newTimeStr}.`
+          })
+        });
+      }
       
       // Recarregar lista de agendamentos
       const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
