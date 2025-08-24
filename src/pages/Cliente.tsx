@@ -335,6 +335,7 @@ const confirmReschedule = async () => {
   // Notificar proprietário
   const ownerId = reschedulingAppointment?.barbershops?.owner_id;
   if (ownerId) {
+      console.log("Enviando push para o proprietário:", ownerId);
     await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
       method: "POST",
       headers: {
@@ -400,7 +401,7 @@ const cancelReschedule = () => {
       .select(`
         *,
         barbers (name, phone),
-        barbershops (name, min_hours_before_cancel, min_hours_before_reschedule, profiles:owner_id(logo_url)),
+        barbershops (name, owner_id, min_hours_before_cancel, min_hours_before_reschedule, profiles:owner_id(logo_url)),
         appointment_services (
           service_id,
           name_snapshot,
@@ -448,6 +449,7 @@ const cancelAppointment = async (appointmentId: string) => {
   .single();
 
 const ownerId = appointment?.barbershops?.owner_id;
+console.log("reschedulingAppointment.barbershops:", reschedulingAppointment?.barbershops);
 if (ownerId) {
   await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
     method: "POST",
