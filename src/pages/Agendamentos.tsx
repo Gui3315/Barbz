@@ -965,19 +965,19 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
                     )}
                   </div>
                   {/* Nome + horário na mesma linha */}
-                <div className="flex items-center gap-3 mt-2 flex-wrap">
-                  <span className="font-semibold text-slate-800 text-base leading-tight break-words">
-                    {appointment.client?.name || "Cliente não informado"}
-                  </span>
-                  <div className="flex items-center text-slate-700">
-                    <Clock size={16} className="ml-1 mr-1 text-blue-600" />
-                    <span className="font-medium text-base">
-                      {appointment.start_at
-                        ? appointment.start_at.substring(11, 16)
-                        : "--:--"}
-                    </span>
-                  </div>
-                </div>
+                <div className="flex items-center justify-between mt-2 w-full flex-nowrap min-w-0">
+  <span className="font-semibold text-slate-800 text-base leading-tight break-words min-w-0 flex-1">
+    {appointment.client?.name || "Cliente não informado"}
+  </span>
+  <div className="flex items-center text-slate-700 flex-shrink-0 ml-3">
+    <Clock size={16} className="mr-1 text-blue-600" />
+    <span className="font-medium text-base">
+      {appointment.start_at
+        ? appointment.start_at.substring(11, 16)
+        : "--:--"}
+    </span>
+  </div>
+</div>
                   {/* Serviço */}
                   <div className="text-sm text-slate-600 mt-1 break-words">
                     {appointment.service?.name || "Serviço selecionado"}
