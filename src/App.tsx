@@ -15,6 +15,7 @@ import Configuracoes from "./pages/Configuracoes";
 import Cliente from "./pages/Cliente";
 import Produtos from "./pages/Meuestabelecimento";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import CreatePassword from "./pages/CreatePassword";
 
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => {
               <Route path="/Meuestabelecimento" element={<Produtos />} />
               <Route path="/configuracoes" element={<Configuracoes />} />
               <Route path="/cliente" element={<ProtectedRoute allowed="cliente"><Cliente /></ProtectedRoute>} />
+              <Route path="/createpassword" element={<CreatePassword />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
