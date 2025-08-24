@@ -450,9 +450,28 @@ const cancelAppointment = async (appointmentId: string) => {
   .single();
 
 const ownerId = appointment?.barbershops?.owner_id;
-const cancelledDate = new Date(appointment?.start_at);
-const cancelledDateStr = cancelledDate.toLocaleDateString('pt-BR');
-const cancelledTimeStr = cancelledDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const startAtRaw = appointment?.start_at;
+let cancelledDateStr = "";
+let cancelledTimeStr = "";
+
+if (startAtRaw) {
+  // Garante formato ISO válido para o construtor do Date
+  const dateObj = new Date(
+    typeof startAtRaw === "string"
+      ? startAtRaw.replace(" ", "T")
+      : startAtRaw
+  );
+  if (!isNaN(dateObj.getTime())) {
+    cancelledDateStr = dateObj.toLocaleDateString('pt-BR');
+    cancelledTimeStr = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  } else {
+    cancelledDateStr = "Data inválida";
+    cancelledTimeStr = "Hora inválida";
+  }
+} else {
+  cancelledDateStr = "Data não encontrada";
+  cancelledTimeStr = "Hora não encontrada";
+}
 console.log("reschedulingAppointment.barbershops:", reschedulingAppointment?.barbershops);
 if (ownerId) {
   await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
@@ -464,7 +483,7 @@ if (ownerId) {
     body: JSON.stringify({
       userId: ownerId,
       title: "Agendamento cancelado",
-      body: `Cliente ${profileData?.user_name || ""} cancelou o horário de ${cancelledDateStr} às ${cancelledTimeStr}.`
+      body: `TESTE Cliente ${profileData?.user_name || ""} cancelou o horário de ${cancelledDateStr} às ${cancelledTimeStr}.`
     })
   });
 }
