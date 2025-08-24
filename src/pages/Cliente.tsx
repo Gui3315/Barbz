@@ -334,19 +334,25 @@ const confirmReschedule = async () => {
 
   // Notificar proprietário
   const ownerId = reschedulingAppointment?.barbershops?.owner_id;
+  const oldDateObj = new Date(reschedulingAppointment.start_at);
+  const oldDateStr = oldDateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
+  const oldTimeStr = oldDateObj.toISOString().slice(11, 16);
+
+  const newDateObj = new Date(newStartDateTimeUTC);
+  const newDateStr = newDateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
+  const newTimeStr = newDateObj.toISOString().slice(11, 16);
+
   if (ownerId) {
-      console.log("Enviando push para o proprietário:", ownerId);
-      console.log("Enviando notificação push para reagendamento", ownerId, reschedulingAppointment.id);
     await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5Z2Zsamhob3F4eXpzZWh2Z3p6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTQxNDYsImV4cCI6MjA2OTYzMDE0Nn0.XIyECwK-8Zp39dGpC0Bdy95fCqD7glOdIJ-xUl7Rl5k" // Troque pela sua anon key real
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5Z2Zsamhob3F4eXpzZWh2Z3p6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTQxNDYsImV4cCI6MjA2OTYzMDE0Nn0.XIyECwK-8Zp39dGpC0Bdy95fCqD7glOdIJ-xUl7Rl5k"
       },
       body: JSON.stringify({
         userId: ownerId,
         title: "Novo reagendamento",
-        body: `Cliente ${profileData?.user_name || ""} reagendou um horário.`
+        body: `${profileData?.user_name || ""} reagendou horário de ${oldDateStr} às ${oldTimeStr} para ${newDateStr} às ${newTimeStr}.`
       })
     });
   }
@@ -485,7 +491,7 @@ if (ownerId) {
     body: JSON.stringify({
       userId: ownerId,
       title: "Agendamento cancelado",
-      body: `TESTE2 Cliente ${profileData?.user_name || ""} cancelou o horário de ${cancelledDateStr} às ${cancelledTimeStr}.`
+      body: `${profileData?.user_name || ""} cancelou o horário de ${cancelledDateStr} às ${cancelledTimeStr}.`
     })
   });
 }
@@ -833,6 +839,10 @@ if (!clientData?.id && !profileData?.id) {
       .single();
 
     const ownerId = barbershopData?.owner_id;
+    const bookingDateObj = new Date(startDateTimeUTC);
+    const bookingDateStr = bookingDateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
+    const bookingTimeStr = bookingDateObj.toISOString().slice(11, 16);
+
     if (ownerId) {
       await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
         method: "POST",
@@ -843,7 +853,7 @@ if (!clientData?.id && !profileData?.id) {
         body: JSON.stringify({
           userId: ownerId,
           title: "Novo agendamento",
-          body: `Cliente ${profileData?.user_name || ""} agendou um horário.`
+          body: `${profileData?.user_name || ""} fez um novo agendamento para ${bookingDateStr} às ${bookingTimeStr}.`
         })
       });
     }
