@@ -445,7 +445,7 @@ const cancelAppointment = async (appointmentId: string) => {
 
   const { data: appointment } = await supabase
   .from("appointments")
-  .select("barbershops(owner_id)")
+  .select("barbershops(owner_id), start_at")
   .eq("id", appointmentId)
   .single();
 
