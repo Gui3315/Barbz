@@ -1,6 +1,8 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
+import { messaging } from "@/lib/firebase";
+import { getToken } from "firebase/messaging";
 import { useAuth } from "@/contexts/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
@@ -149,7 +151,32 @@ export default function Login() {
       // 4. Salva no context (que vai salvar no localStorage automaticamente)
       setUser(authUser);
 
-      // 5. Redireciona baseado no tipo
+      // 5. OBTÉM O TOKEN FCM E SALVA NO BACKEND
+      if (Notification.permission !== "denied") {
+        console.log("Permissão atual:", Notification.permission);
+        Notification.requestPermission().then(async (permission) => {
+          console.log("Permissão:", permission);
+          if (permission === "granted") {
+            try {
+              const token = await getToken(messaging, {
+                vapidKey: "BEpssaIfMV9-bdgf4_MMcJMM80NKT8axxCvXJeq3B6idOzLY0HXPXrewwMmLqnqE6vzro466LDqj-RFLDda3JCw"
+              });
+              if (token) {
+              // Salva o token diretamente no Supabase
+              await supabase
+                .from("push_tokens")
+                .upsert([
+                  { user_id: authUser.id, token }
+                ]);
+            }
+            } catch (err) {
+              console.error("Erro ao obter token FCM:", err);
+            }
+          }
+        });
+      }
+
+      // 6. Redireciona baseado no tipo
       const targetRoute = profile.user_type === "proprietario" ? "/agendamentos" : "/cliente";
       navigate(targetRoute);
 

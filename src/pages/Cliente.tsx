@@ -331,6 +331,23 @@ const confirmReschedule = async () => {
     if (error) throw error
     
     alert("Agendamento reagendado com sucesso!")
+
+  // Notificar proprietário
+  const ownerId = reschedulingAppointment?.barbershops?.owner_id;
+  if (ownerId) {
+    await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5Z2Zsamhob3F4eXpzZWh2Z3p6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTQxNDYsImV4cCI6MjA2OTYzMDE0Nn0.XIyECwK-8Zp39dGpC0Bdy95fCqD7glOdIJ-xUl7Rl5k" // Troque pela sua anon key real
+      },
+      body: JSON.stringify({
+        userId: ownerId,
+        title: "Novo reagendamento",
+        body: `Cliente ${profileData?.user_name || ""} reagendou um horário.`
+      })
+    });
+  }
     
     // Recarregar lista de agendamentos
     fetchUserAppointments()
@@ -423,6 +440,28 @@ const cancelAppointment = async (appointmentId: string) => {
     
     alert("Agendamento cancelado com sucesso!")
     fetchUserAppointments() // Recarregar lista
+
+  const { data: appointment } = await supabase
+  .from("appointments")
+  .select("barbershops(owner_id)")
+  .eq("id", appointmentId)
+  .single();
+
+const ownerId = appointment?.barbershops?.owner_id;
+if (ownerId) {
+  await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5Z2Zsamhob3F4eXpzZWh2Z3p6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTQxNDYsImV4cCI6MjA2OTYzMDE0Nn0.XIyECwK-8Zp39dGpC0Bdy95fCqD7glOdIJ-xUl7Rl5k"
+    },
+    body: JSON.stringify({
+      userId: ownerId,
+      title: "Agendamento cancelado",
+      body: `Cliente ${profileData?.user_name || ""} cancelou um horário.`
+    })
+  });
+}
     
   } catch (error) {
     console.error("Erro ao cancelar agendamento:", error)
@@ -756,6 +795,31 @@ if (!clientData?.id && !profileData?.id) {
         })
 
       alert("Agendamento realizado com sucesso!")
+
+    // ...após alert("Agendamento realizado com sucesso!")...
+
+    // Buscar o owner_id da barbearia do agendamento
+    const { data: barbershopData } = await supabase
+      .from("barbershops")
+      .select("owner_id")
+      .eq("id", selectedBarbershop.id)
+      .single();
+
+    const ownerId = barbershopData?.owner_id;
+    if (ownerId) {
+      await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5Z2Zsamhob3F4eXpzZWh2Z3p6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQwNTQxNDYsImV4cCI6MjA2OTYzMDE0Nn0.XIyECwK-8Zp39dGpC0Bdy95fCqD7glOdIJ-xUl7Rl5k"
+        },
+        body: JSON.stringify({
+          userId: ownerId,
+          title: "Novo agendamento",
+          body: `Cliente ${profileData?.user_name || ""} agendou um horário.`
+        })
+      });
+    }
 
       // Recarregar a lista de agendamentos
       fetchUserAppointments()
