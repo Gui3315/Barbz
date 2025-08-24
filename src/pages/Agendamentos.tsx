@@ -224,7 +224,7 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
         status: a.status,
         total_price: a.total_price,
         notes: a.notes,
-        client: { name: a.client_name },
+        client: { id: a.client_id, name: a.client_name },
         service: { name: a.service_name },
         barber: { name: a.barber_name },
         duration_minutes_snapshot: a.duration_minutes_snapshot,
@@ -387,9 +387,10 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
           status: a.status,
           total_price: a.total_price,
           notes: a.notes,
-          client: { name: a.client_name },
+          client: { id: a.client_id, name: a.client_name },
           service: { name: a.service_name },
           barber: { name: a.barber_name },
+          duration_minutes_snapshot: a.duration_minutes_snapshot,
         }))
       )
     }
@@ -458,11 +459,15 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
       const dateStr = dateObj.toISOString().slice(0, 10).split('-').reverse().join('/');
       const timeStr = dateObj.toISOString().slice(11, 16);
 
+      // Pegue o token do usuário autenticado
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
       await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer SEU_TOKEN"
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({
           userId: clientId,
@@ -499,7 +504,7 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
           status: a.status,
           total_price: a.total_price,
           notes: a.notes,
-          client: { name: a.client_name },
+          client: { id: a.client_id, name: a.client_name },
           service: { name: a.service_name },
           barber: { name: a.barber_name },
           duration_minutes_snapshot: a.duration_minutes_snapshot,
@@ -628,19 +633,23 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
       const newTimeStr = newDateObj.toISOString().slice(11, 16);
 
       if (clientId) {
-        await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer SEU_TOKEN"
-          },
-          body: JSON.stringify({
-            userId: clientId,
-            title: "Horário reagendado",
-            body: `Seu agendamento foi reagendado de ${oldDateStr} às ${oldTimeStr} para ${newDateStr} às ${newTimeStr}.`
-          })
-        });
-      }
+      // Pegue o token do usuário autenticado
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      await fetch("https://pygfljhhoqxyzsehvgzz.supabase.co/functions/v1/send-push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          userId: clientId,
+          title: "Horário reagendado",
+          body: `Seu agendamento foi reagendado de ${oldDateStr} às ${oldTimeStr} para ${newDateStr} às ${newTimeStr}.`
+        })
+      });
+    }
       
       // Recarregar lista de agendamentos
       const user = supabase.auth.getUser ? (await supabase.auth.getUser()).data.user : null
@@ -672,7 +681,7 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
             status: a.status,
             total_price: a.total_price,
             notes: a.notes,
-            client: { name: a.client_name },
+            client: { id: a.client_id, name: a.client_name },
             service: { name: a.service_name },
             barber: { name: a.barber_name },
             duration_minutes_snapshot: a.duration_minutes_snapshot,
@@ -895,94 +904,98 @@ console.log('client_name do primeiro:', appointmentsData[0]?.client_name);
                   </div>
                 ) : (
                   filteredAppointments.map((appointment, idx) => (
-                    <div
-                      key={appointment.id}
-                      className={`p-4 backdrop-blur-sm rounded-xl flex items-center justify-between transition-all hover:shadow-md ${
-                        appointment.status === "confirmed"
-                        ? "border-green-200 bg-green-50"
-                        : appointment.status === "cancelled"
-                        ? "border-red-200 bg-red-50"
-                        : "border-amber-200 bg-amber-50"
-                      }${idx !== 0 ? " mt-3" : ""}`}
-                    >
-                      <div className="flex items-center">
-                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center text-white font-semibold shadow-lg">
-                          {appointment.client?.name && appointment.client.name !== "Cliente não informado"
-                            ? appointment.client.name
-                                .split(" ")
-                                .map((name: string) => name[0])
-                                .join("")
-                                .substring(0, 2)
-                            : "CN"}
-                        </div>
-                        <div className="ml-4">
-                        <div className="flex items-center gap-2">
-                          <div className="font-semibold text-slate-800">
-                            {appointment.client?.name || "Cliente não informado"}
-                          </div>
-                          {/* Badge de status */}
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                            ${appointment.status === "cancelled"
-                              ? "bg-red-100 text-red-700"
-                              : appointment.status === "confirmed"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-amber-100 text-amber-700"
-                            }`
-                          }>
-                            {appointment.status === "cancelled"
-                              ? "Cancelado"
-                              : appointment.status === "confirmed"
-                              ? "Confirmado"
-                              : "Pendente"}
-                          </span>
-                        </div>
-                        <div className="text-sm text-slate-600">
-                          <div>{appointment.service?.name || "Serviço selecionado"}</div>
-                          {appointment.duration_minutes_snapshot && (
-                            <span className="text-xs text-slate-500">
-                              ({appointment.duration_minutes_snapshot}min)
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      </div>
-                    <div className="flex flex-col items-end">
-                      {/* Botões de ação */}
-                      {appointment.status !== "cancelled" && (
-                        <div className="flex flex-row gap-2 mb-2">
-                          <button
-                            onClick={() => startRescheduling(appointment)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors duration-200"
-                            title="Reagendar"
-                          >
-                            <CalendarIcon2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleCancelAppointment(appointment.id)}
-                            className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors duration-200"
-                            title="Cancelar agendamento"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      )}
-                      <div className="flex flex-col items-end">
-                      <div className="flex items-center text-slate-700">
-                        <Clock size={14} className="mr-2 text-blue-600" />
-                        <span className="font-medium">
-                          {appointment.start_at
-                            ? appointment.start_at.substring(11, 16)
-                            : "--:--"}
-                        </span>
-                      </div>
-                      <div className="flex flex-col items-end">
-                        <div className="text-sm text-slate-500 mb-2">{appointment.barber?.name || "Barbeiro"}</div>
-                        </div>
-                        </div>
-                    </div>
+                  <div
+                  key={appointment.id}
+                  className={`p-4 backdrop-blur-sm rounded-xl flex flex-row transition-all hover:shadow-md ${
+                    appointment.status === "confirmed"
+                      ? "border-green-200 bg-green-50"
+                      : appointment.status === "cancelled"
+                      ? "border-red-200 bg-red-50"
+                      : "border-amber-200 bg-amber-50"
+                  }${idx !== 0 ? " mt-3" : ""}`}
+                  style={{ overflow: "hidden" }}
+                >
+                  {/* Avatar */}
+                  <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-700 flex items-center justify-center text-white font-semibold shadow-lg flex-shrink-0 mt-1" >
+                    {appointment.client?.name && appointment.client.name !== "Cliente não informado"
+                      ? appointment.client.name
+                          .split(" ")
+                          .map((name) => name[0])
+                          .join("")
+                          .substring(0, 2)
+                      : "CN"}
                   </div>
-                  ))
-                )}
+                  {/* Infos principais */}
+                  <div className="flex-1 ml-4 min-w-0 flex flex-col">
+                  {/* Topo: badge à esquerda, ícones à direita */}
+                  <div className="flex w-full items-start justify-between">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium
+                      ${appointment.status === "cancelled"
+                        ? "bg-red-100 text-red-700"
+                        : appointment.status === "confirmed"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-amber-100 text-amber-700"
+                      }`
+                    }>
+                      {appointment.status === "cancelled"
+                        ? "Cancelado"
+                        : appointment.status === "confirmed"
+                        ? "Confirmado"
+                        : "Pendente"}
+                    </span>
+                    {appointment.status !== "cancelled" && (
+                      <div className="flex flex-row gap-2">
+                        <button
+                          onClick={() => startRescheduling(appointment)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors duration-200"
+                          title="Reagendar"
+                          type="button"
+                        >
+                          <CalendarIcon2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleCancelAppointment(appointment.id)}
+                          className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors duration-200"
+                          title="Cancelar agendamento"
+                          type="button"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {/* Nome + horário na mesma linha */}
+                <div className="flex items-center gap-3 mt-2 flex-wrap">
+                  <span className="font-semibold text-slate-800 text-base leading-tight break-words">
+                    {appointment.client?.name || "Cliente não informado"}
+                  </span>
+                  <div className="flex items-center text-slate-700">
+                    <Clock size={16} className="ml-1 mr-1 text-blue-600" />
+                    <span className="font-medium text-base">
+                      {appointment.start_at
+                        ? appointment.start_at.substring(11, 16)
+                        : "--:--"}
+                    </span>
+                  </div>
+                </div>
+                  {/* Serviço */}
+                  <div className="text-sm text-slate-600 mt-1 break-words">
+                    {appointment.service?.name || "Serviço selecionado"}
+                    {appointment.duration_minutes_snapshot && (
+                      <span className="text-xs text-slate-500 ml-1">
+                        ({appointment.duration_minutes_snapshot}min)
+                      </span>
+                    )}
+                  </div>
+                  {/* Barbeiro */}
+                  <div className="text-sm text-slate-500 mt-1">
+                    {appointment.barber?.name || "Barbeiro"}
+                  </div>
+                </div>
+                </div>
+                    
+                  
+                )))}
               </CardContent>
             </Card>
 
