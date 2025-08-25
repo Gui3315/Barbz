@@ -101,7 +101,7 @@ export default function CreatePassword() {
               </div>
               <Button
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
-                onClick={() => navigate("/")}
+                onClick={() => navigate("/login")}
               >
                 Fazer login
               </Button>
