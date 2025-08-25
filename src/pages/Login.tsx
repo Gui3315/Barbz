@@ -385,7 +385,7 @@ const handleSignup = async (e: React.FormEvent) => {
     console.log("✅ Cadastro completo realizado via RPC:", rpcResult)
 
     // Sucesso - limpar formulário
-    setSuccess("Cadastro realizado! Verifique seu email para confirmar.")
+    setSuccess("Cadastro realizado! Faça login.")
     setMode("login")
     setEmail("")
     setPassword("")
