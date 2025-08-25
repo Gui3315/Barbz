@@ -416,7 +416,7 @@ const handleSignup = async (e: React.FormEvent) => {
     setSuccess(null)
     const emailNorm = email.trim().toLowerCase()
     const { error } = await supabase.auth.resetPasswordForEmail(emailNorm, {
-      redirectTo: window.location.origin + "/create-password",
+      redirectTo: "https://barbz.vercel.app/createpassword",
     })
     if (error) {
       setError(error.message)
