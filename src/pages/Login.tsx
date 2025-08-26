@@ -165,9 +165,16 @@ export default function Login() {
               // Salva o token diretamente no Supabase
               await supabase
                 .from("push_tokens")
-                .upsert([
-                  { user_id: authUser.id, token }
-                ]);
+                .upsert(
+                  [
+                    {
+                      user_id: authUser.id,
+                      token,
+                      updated_at: new Date().toISOString(),
+                    },
+                  ],
+                  { onConflict: 'user_id' }
+                );
             }
             } catch (err) {
               console.error("Erro ao obter token FCM:", err);
