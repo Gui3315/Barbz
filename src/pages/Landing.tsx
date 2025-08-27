@@ -48,7 +48,7 @@ export default function Landing() {
                 Gestão moderna para barbearias
               </div>
               <h1 className="text-5xl md:text-6xl font-black tracking-tight leading-tight">
-                Barbz: Agendamento e Gestão Financeira em um só lugar
+                Barbz: Agendamento e Gestão Financeira para barbearias
               </h1>
               <p className="text-xl md:text-2xl text-slate-300 leading-relaxed">
                 Plataforma online para barbearias controlarem <strong>agendamentos</strong>, <strong>clientes</strong>, e <strong>caixa</strong> sem complicação. Mais organização, menos faltas e mais lucro para seu negócio.
