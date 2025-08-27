@@ -46,6 +46,39 @@ export default function MeuEstabelecimento() {
   const [loadingBarberSchedule, setLoadingBarberSchedule] = useState(false)
   const [savingBarberSchedule, setSavingBarberSchedule] = useState(false)
 
+  //Lembrete de agendamento ao cliente
+  const [notifyHoursBefore, setNotifyHoursBefore] = useState<number>(2);
+  const [savingNotify, setSavingNotify] = useState(false);
+
+  useEffect(() => {
+    if (!barbershopId) return;
+    async function fetchNotifyHours() {
+      const { data } = await supabase
+        .from("barbershops")
+        .select("notify_client_hours_before")
+        .eq("id", barbershopId)
+        .maybeSingle();
+      if (data) setNotifyHoursBefore(data.notify_client_hours_before ?? 2);
+    }
+    fetchNotifyHours();
+  }, [barbershopId]);
+
+  // Handler para salvar:
+  const handleSaveNotify = async () => {
+    if (!barbershopId) return;
+    setSavingNotify(true);
+    const { error } = await supabase
+      .from("barbershops")
+      .update({ notify_client_hours_before: notifyHoursBefore })
+      .eq("id", barbershopId);
+    setSavingNotify(false);
+    if (!error) {
+      toast({ title: "Configuração de notificação salva!" });
+    } else {
+      toast({ title: "Erro ao salvar notificação", description: error.message, variant: "destructive" });
+    }
+  };
+
 type Barbershop = {
   id?: string;
   min_hours_before_cancel?: number;
@@ -1377,7 +1410,7 @@ const handleSaveBarberSchedule = async (barberId: string) => {
               <div className="bg-gradient-to-r from-amber-700 to-blue-700 p-6">
                 <h2 className="text-2xl font-bold text-white flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center"></div>
-                  Política de Reagendamento/Cancelamento
+                  Política de Reagendamento/<wbr/>Cancelamento
                 </h2>
               </div>
               <div className="p-6">
@@ -1425,7 +1458,44 @@ const handleSaveBarberSchedule = async (barberId: string) => {
                 </form>
               </div>
             </div>
-
+            <div className="backdrop-blur-sm bg-white/80 rounded-2xl border border-white/20 shadow-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-700 to-amber-700 p-6">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center"></div>
+                Notificação de Lembrete para o Cliente
+              </h2>
+            </div>
+            <div className="p-6">
+              <form className="space-y-4" onSubmit={e => { e.preventDefault(); handleSaveNotify(); }}>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Avisar cliente quantas horas antes do agendamento?
+                  </label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={48}
+                    value={notifyHoursBefore}
+                    onChange={e => setNotifyHoursBefore(Number(e.target.value))}
+                    className="border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                    required
+                  />
+                  <div className="text-xs text-slate-500 mt-2">
+                    O cliente receberá uma notificação push lembrando do agendamento com essa antecedência.
+                  </div>
+                </div>
+                <div className="pt-4">
+                  <Button
+                    type="submit"
+                    disabled={savingNotify}
+                    className="bg-gradient-to-r from-blue-700 to-amber-700 hover:from-blue-800 hover:to-amber-800 text-white font-semibold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+                  >
+                    {savingNotify ? "Salvando..." : "Salvar Notificação"}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
           </div>
         </div>
       </DashboardLayout>
