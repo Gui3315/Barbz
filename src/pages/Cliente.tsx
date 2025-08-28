@@ -1549,7 +1549,7 @@ useEffect(() => {
                         </button>
                       </div>
                     )}
-                      </div>
+                      
                     {/* Passo 3B: Selecionar Barbeiro (Por barbeiro) */}
                     {bookingStep === "barber" && bookingMethod === "by-barber" && (
                       <div className="space-y-4">
@@ -1658,7 +1658,10 @@ useEffect(() => {
                         ) : (
                           <>
                             <h3 className="text-lg font-semibold text-slate-800 mb-4">
-                              Escolha o horário
+                              Escolha o horário desejado
+                              <h4 className="text-sm font-normal text-slate-600 block">
+                                ⚠️ Mostramos apenas os horários disponíveis para a data selecionada.
+                              </h4>
                               <span className="text-sm font-normal text-slate-600 block">
                                 Data: {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}
                                 {bookingMethod === "by-time" && selectedService && (
@@ -1673,8 +1676,10 @@ useEffect(() => {
                             {availableSlots.length === 0 ? (
                               <div className="text-center py-8 text-slate-600">
                                 <Clock size={32} className="mx-auto mb-2 text-slate-400" />
-                                <p>Nenhum horário disponível para esta data.</p>
-                                <p className="text-sm">Tente selecionar outra data.</p>
+                                <p>😢 Todos os horários estão ocupados.
+                                  <br/>Mas não se preocupe!
+                                </p>
+                                <p className="text-sm">Selecione outro barbeiro ou outra data para garantir o seu horário.</p>
                               </div>
                             ) : (
                               <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -1722,6 +1727,8 @@ useEffect(() => {
                           <>
                             <h3 className="text-lg font-semibold text-slate-800 mb-4">
                               Escolha o barbeiro
+                              <h4 className="text-sm font-normal text-slate-600 block">
+                                ⚠️ Mostramos apenas os barbeiros disponíveis para a data/horário selecionado.                              </h4>
                               <span className="text-sm font-normal text-slate-600 block">
                                 {selectedService?.name} • {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')} às {selectedTime}
                               </span>
@@ -1905,7 +1912,7 @@ useEffect(() => {
                       </div>
                     )}
                   </div>
-                
+                </div>
               </TabsContent>
 
               <TabsContent value="perfil" className="p-6">
