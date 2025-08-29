@@ -605,7 +605,8 @@ const filterServicesForTimeSlot = async (timeSlot: string) => {
     try {
       const { data, error } = await supabase
         .from("barbershops")
-        .select("id, name, whatsapp_number, whatsapp_message_title, whatsapp_message_text, profiles:owner_id(logo_url)")
+        .select("id, name, whatsapp_number, whatsapp_message_title, whatsapp_message_text, profiles:owner_id(logo_url, address, city)")
+        .eq("is_active", true)
         .order("name")
       
       if (error) throw error
@@ -918,7 +919,7 @@ if (!clientData?.id && !profileData?.id) {
     
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, user_name, email, phone, profile_photo_url")
+      .select("id, user_name, email, phone, profile_photo_url, address, city")
       .match({ id: user.id, user_type: "cliente" })
       .single();
       
@@ -1668,7 +1669,7 @@ useEffect(() => {
                                   <> • Serviço: {selectedService.name}</>
                                 )}
                                 {bookingMethod === "by-barber" && selectedBarber && (
-                                  <> • Barbeiro: {selectedBarber.name}</>
+                                  <> <br/>• Barbeiro: {selectedBarber.name}</>
                                 )}
                               </span>
                             </h3>
@@ -1776,6 +1777,12 @@ useEffect(() => {
                                 <h4 className="font-semibold text-slate-800 mb-4">Resumo do Agendamento</h4>
                                 <div className="space-y-2 text-sm">
                                   <p><strong>Barbearia:</strong> {selectedBarbershop?.name}</p>
+                                  <p>
+                                    <strong>Endereço:</strong>{" "}
+                                    {selectedBarbershop?.profiles?.address && selectedBarbershop?.profiles?.city
+                                      ? `${selectedBarbershop.profiles.address}, ${selectedBarbershop.profiles.city}`
+                                      : "Não informado"}
+                                  </p>
                                   <p><strong>Serviço:</strong> {selectedService?.name} ({selectedService?.duration_minutes} min)</p>
                                   <p><strong>Barbeiro:</strong> {selectedBarber.name}</p>
                                   <p><strong>Data:</strong> {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
@@ -1883,6 +1890,12 @@ useEffect(() => {
                             <h4 className="font-semibold text-slate-800 mb-4">Resumo do Agendamento</h4>
                             <div className="space-y-2 text-sm">
                               <p><strong>Barbearia:</strong> {selectedBarbershop?.name}</p>
+                              <p>
+                                <strong>Endereço:</strong>{" "}
+                                {selectedBarbershop?.profiles?.address && selectedBarbershop?.profiles?.city
+                                  ? `${selectedBarbershop.profiles.address}, ${selectedBarbershop.profiles.city}`
+                                  : "Não informado"}
+                              </p>
                               <p><strong>Barbeiro:</strong> {selectedBarber?.name}</p>
                               <p><strong>Serviço:</strong> {selectedService.name} ({selectedService.duration_minutes} min)</p>
                               <p><strong>Data:</strong> {new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
